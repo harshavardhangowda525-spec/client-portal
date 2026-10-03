@@ -27,6 +27,7 @@
     "postgres": "^3.4.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -37,7 +38,7 @@
     "@types/react-dom": "^19.3.0",
     "dotenv": "^18.0.5",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
+    "typescript": "5.9",
     "vitest": "^5.0.3"
   }
 }

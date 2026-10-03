@@ -344,8 +344,8 @@ async function loadForResponse(tx: Tx, actor: Actor, versionId: string) {
 
 const acceptSchema = z.object({
   signer_name: text(200, 2),
-  confirm_scope: z.literal(true, { errorMap: () => ({ message: "Please confirm you have reviewed the scope" }) }),
-  confirm_terms: z.literal(true, { errorMap: () => ({ message: "Please confirm you agree to the terms" }) }),
+  confirm_scope: z.literal(true, { error: "Please confirm you have reviewed the scope" }),
+  confirm_terms: z.literal(true, { error: "Please confirm you agree to the terms" }),
   content_hash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
@@ -409,4 +409,23 @@ export async function acceptedVersion(tx: Tx, projectId: string) {
     select ${CLIENT_COLUMNS(tx)}, q.number from quotation_versions v join quotations q on q.id = v.quotation_id
     where v.project_id = ${projectId} and v.status = 'accepted' order by v.accepted_at desc limit 1`;
   return v ?? null;
+}
+
+/** Save an existing quotation version's content as a reusable template. */
+export async function saveVersionAsTemplate(actor: Actor, versionId: string, name: string) {
+  assertAdmin(actor);
+  const n = parse(text(200), name);
+  return withDb(actor, async (tx) => {
+    const [v] = await tx<QuoteVersion[]>`select * from quotation_versions where id = ${versionId}`;
+    if (!v) throw notFound();
+    const items = await tx<QuoteItem[]>`select description, details, quantity, unit_price from quotation_items where version_id = ${versionId} order by position`;
+    const content = {
+      project_description: v.project_description, items: items.map((i) => ({ description: i.description, details: i.details, quantity: Number(i.quantity), unit_price: Number(i.unit_price) })),
+      payment_terms: v.payment_terms.map((t) => ({ label: t.label, percent: t.percent, due: t.due })), included_features: v.included_features, exclusions: v.exclusions,
+      revisions_included: v.revisions_included, maintenance_terms: v.maintenance_terms, domain_hosting_terms: v.domain_hosting_terms,
+      delivery_timeline: v.delivery_timeline, terms_conditions: v.terms_conditions, tax_label: v.tax_label, tax_rate: Number(v.tax_rate), valid_days: 15,
+    };
+    const [t] = await tx<{ id: string }[]>`insert into quotation_templates (name, description, content) values (${n}, ${`Created from ${v.version_no > 1 ? `version ${v.version_no}` : "a quotation"}`}, ${tx.json(content as never)}) returning id`;
+    return t.id;
+  });
 }
