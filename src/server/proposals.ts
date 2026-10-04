@@ -248,7 +248,7 @@ export async function saveProposal(actor: Actor, proposalId: string | null, raw:
     await tx`insert into proposal_version_internal (version_id, internal_notes, provider_costs)
              values (${versionId}, ${internal_notes}, ${tx.json(providerCosts)})
              on conflict (version_id) do update set internal_notes = excluded.internal_notes, provider_costs = excluded.provider_costs`;
-    return { proposalId: pid!, versionId, number, computed };
+    return { proposalId: pid!, versionId, number, clientId, computed };
   });
 }
 

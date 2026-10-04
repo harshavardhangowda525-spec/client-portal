@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { company } from "@/lib/config";
 import { formatMoneyPlain } from "@/lib/money";
-import { fmtDate, fmtDateTime, PAYMENT_METHODS, QUOTE_STATUS, INVOICE_STATUS } from "@/lib/format";
+import { fmtDate, fmtDateTime, PAYMENT_METHODS, QUOTE_STATUS, INVOICE_STATUS, PROJECT_TYPE_LABELS, periodLabel } from "@/lib/format";
 import type { QuoteItem, QuoteVersion } from "./quotations";
 
 const NAVY = rgb(0.035, 0.07, 0.16);
@@ -340,14 +340,6 @@ type PVersion = {
   };
 };
 
-export const PROJECT_TYPE_LABELS: Record<string, string> = {
-  website: "Website", android_app: "Android app", ios_app: "iOS app", cross_platform_app: "Cross-platform app",
-  website_app: "Website + app", custom_software: "Custom software",
-};
-
-export function periodLabel(billing: string, period: string | null) {
-  return billing === "one_time" ? "One-time" : period === "annual" ? "Per year" : "Per month";
-}
 
 export async function proposalPdf(
   p: { number: string; title: string; client: { business_name: string; owner_name: string; email: string; phone: string | null } },

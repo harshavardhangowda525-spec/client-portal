@@ -24,6 +24,13 @@ export const QuoteBadge = ({ status }: { status: string }) => <Badge tone={quote
 const previewTone: Record<string, Tone> = { ready_for_review: "blue", changes_requested: "amber", approved: "green", superseded: "" };
 export const PreviewBadge = ({ status }: { status: string }) => <Badge tone={previewTone[status]}>{PREVIEW_STATUS[status] ?? status}</Badge>;
 
+export const PROPOSAL_STATUS: Record<string, string> = {
+  draft: "Draft", ready: "Ready to send", sent: "Sent", viewed: "Viewed", changes_requested: "Changes requested", accepted: "Accepted",
+  rejected: "Rejected", expired: "Expired", cancelled: "Cancelled", superseded: "Superseded",
+};
+const proposalTone: Record<string, Tone> = { draft: "", ready: "violet", sent: "blue", viewed: "violet", changes_requested: "amber", accepted: "green", rejected: "red", expired: "red", cancelled: "", superseded: "" };
+export const ProposalBadge = ({ status }: { status: string }) => <Badge tone={proposalTone[status]}>{PROPOSAL_STATUS[status] ?? status}</Badge>;
+
 const invoiceTone: Record<string, Tone> = { draft: "", issued: "blue", partially_paid: "amber", paid: "green", void: "", overdue: "red" };
 export const InvoiceBadge = ({ status, overdue }: { status: string; overdue?: boolean }) =>
   overdue ? <Badge tone="red">Overdue</Badge> : <Badge tone={invoiceTone[status]}>{INVOICE_STATUS[status] ?? status}</Badge>;

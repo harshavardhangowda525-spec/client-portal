@@ -5,15 +5,18 @@ import { Icon } from "./icons";
 import { logoutAction } from "@/app/actions/auth";
 import { clientProjects } from "@/server/dashboards";
 import { unreadMessageCount, unreadNotificationCount } from "@/server/content";
+import { listClientProposals } from "@/server/proposals";
 import type { Actor } from "@/lib/db";
 import Link from "next/link";
 
 export async function ClientShell({ actor, projectId, children }: { actor: Actor; projectId?: string; children: ReactNode }) {
-  const [projects, unreadNotes, unreadMsgs] = await Promise.all([
+  const [projects, unreadNotes, unreadMsgs, proposals] = await Promise.all([
     clientProjects(actor),
     unreadNotificationCount(actor),
     projectId ? unreadMessageCount(actor, projectId) : Promise.resolve(0),
+    listClientProposals(actor),
   ]);
+  const awaiting = proposals.filter((p) => ["sent", "viewed"].includes(p.status)).length;
   const pid = projectId ?? projects[0]?.id;
   const groups: NavGroup[] = [];
   if (pid) {
@@ -31,14 +34,17 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
         { href: `${base}/documents`, label: "Documents", icon: "folder" },
       ],
     });
-    groups.push({
-      label: "Account",
-      items: [
-        { href: `${base}/notifications`, label: "Notifications", icon: "bell", count: unreadNotes },
-        { href: `${base}/account`, label: "Account", icon: "settings" },
-      ],
-    });
   }
+  groups.push({
+    label: "Account",
+    items: [
+      { href: "/portal/proposals", label: "Proposals", icon: "file", count: awaiting },
+      ...(pid ? [
+        { href: `/portal/${pid}/notifications`, label: "Notifications", icon: "bell" as const, count: unreadNotes },
+        { href: `/portal/${pid}/account`, label: "Account", icon: "settings" as const },
+      ] : []),
+    ],
+  });
   if (projects.length > 1) {
     groups.push({ label: "Your projects", items: projects.map((p) => ({ href: `/portal/${p.id}`, label: p.name, icon: "briefcase" as const, exact: true })) });
   }
