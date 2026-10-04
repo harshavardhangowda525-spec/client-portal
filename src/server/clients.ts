@@ -43,17 +43,16 @@ export async function updateClient(actor: Actor, clientId: string, input: unknow
   });
 }
 
-export async function listClients(actor: Actor, opts: { archived?: boolean } = {}) {
+export async function listClients(actor: Actor) {
   assertAdmin(actor);
   return withDb(actor, (tx) => tx<{
     id: string; business_name: string; owner_name: string; email: string; phone: string | null;
-    business_category: string | null; portal_access_revoked_at: Date | null; archived_at: Date | null; is_sample: boolean;
+    business_category: string | null; portal_access_revoked_at: Date | null; is_sample: boolean;
     project_count: number; user_count: number; created_at: Date;
   }[]>`
     select c.*, (select count(*)::int from projects p where p.client_id = c.id) as project_count,
            (select count(*)::int from users u where u.client_id = c.id and u.disabled_at is null) as user_count
-    from client_profiles c where ${opts.archived ? tx`c.archived_at is not null` : tx`c.archived_at is null`}
-    order by c.created_at desc`);
+    from client_profiles c order by c.created_at desc`);
 }
 
 export async function getClient(actor: Actor, clientId: string) {
@@ -363,18 +362,17 @@ export async function grantProjectAccess(actor: Actor, projectId: string, userId
 }
 
 // ---------------------------------------------------------------------------
-// Deleting / archiving clients
+// Deleting clients
 // ---------------------------------------------------------------------------
 export type DeletionImpact = {
   businessName: string;
-  archived: boolean;
-  /** Signed or financial records that must be kept; when non-empty the client is archived instead of deleted. */
+  /** Signed or financial records that will also be deleted (shown as an extra warning). */
   protectedRecords: string[];
   counts: { projects: number; proposals: number; quotations: number; invoices: number; payments: number; documents: number; users: number };
 };
 
 async function impact(tx: Tx, clientId: string): Promise<DeletionImpact> {
-  const [c] = await tx<{ business_name: string; archived_at: Date | null }[]>`select business_name, archived_at from client_profiles where id = ${clientId}`;
+  const [c] = await tx<{ business_name: string }[]>`select business_name from client_profiles where id = ${clientId}`;
   if (!c) throw notFound("Client not found.");
   const [n] = await tx<Record<string, number>[]>`
     select
@@ -396,7 +394,7 @@ async function impact(tx: Tx, clientId: string): Promise<DeletionImpact> {
     n.confirmed_payments ? `${n.confirmed_payments} confirmed or refunded payment${n.confirmed_payments > 1 ? "s" : ""}` : "",
   ].filter(Boolean);
   return {
-    businessName: c.business_name, archived: !!c.archived_at, protectedRecords,
+    businessName: c.business_name, protectedRecords,
     counts: { projects: n.projects, proposals: n.proposals, quotations: n.quotations, invoices: n.invoices, payments: n.payments, documents: n.documents, users: n.users },
   };
 }
@@ -407,11 +405,11 @@ export async function clientDeletionImpact(actor: Actor, clientId: string) {
 }
 
 /**
- * Permanently delete a client and everything belonging to them — unless they have signed or
- * financial records, in which case the client is archived: hidden, portal access revoked,
- * records kept. The admin must type the business name to confirm.
+ * Permanently delete a client and everything belonging to them — projects, proposals, quotations
+ * (including accepted ones), invoices, payments, documents, messages, invitations and portal logins.
+ * The admin must type the business name to confirm. Only an audit entry recording the deletion remains.
  */
-export async function deleteClient(actor: Actor, clientId: string, confirmName: string): Promise<{ result: "deleted" | "archived" }> {
+export async function deleteClient(actor: Actor, clientId: string, confirmName: string): Promise<{ result: "deleted" }> {
   assertAdmin(actor);
   return withDb(actor, async (tx) => {
     const im = await impact(tx, clientId);
@@ -419,33 +417,17 @@ export async function deleteClient(actor: Actor, clientId: string, confirmName: 
     if (!confirmName || norm(confirmName) !== norm(im.businessName)) {
       throw new AppError(`Type the business name exactly ("${im.businessName}") to confirm.`);
     }
-    // Sign everyone out and stop any pending invitations in both cases.
-    await tx`delete from sessions where user_id in (select id from users where client_id = ${clientId})`;
-    await tx`update client_invitations set revoked_at = now() where client_id = ${clientId} and accepted_at is null and revoked_at is null`;
-
-    if (im.protectedRecords.length > 0) {
-      await tx`update client_profiles set archived_at = coalesce(archived_at, now()), portal_access_revoked_at = coalesce(portal_access_revoked_at, now())
-               where id = ${clientId}`;
-      await audit(tx, actor, "client.archived", "client", clientId, null, { business_name: im.businessName, kept: im.protectedRecords });
-      return { result: "archived" as const };
-    }
-
-    // No signed or financial records: remove everything. Sent (but never accepted) quotation and
-    // proposal versions are normally undeletable, so the purge switch is enabled for this transaction only.
+    // Sent, accepted and acceptance records are normally undeletable; enable the purge switch for this transaction only.
     await tx`select set_config('app.purge', 'on', true)`;
+    await tx`delete from sessions where user_id in (select id from users where client_id = ${clientId})`;
     await tx`delete from projects where client_id = ${clientId}`;
+    // Proposals (and their acceptance records) go before the client's users, which acceptances reference.
+    await tx`delete from proposals where client_id = ${clientId}`;
     await tx`delete from client_profiles where id = ${clientId}`;
     await tx`select set_config('app.purge', 'off', true)`;
-    await audit(tx, actor, "client.deleted", "client", clientId, null, { business_name: im.businessName, removed: im.counts });
+    await audit(tx, actor, "client.deleted", "client", clientId, null, {
+      business_name: im.businessName, removed: im.counts, included_signed_or_financial: im.protectedRecords,
+    });
     return { result: "deleted" as const };
-  });
-}
-
-export async function unarchiveClient(actor: Actor, clientId: string) {
-  assertAdmin(actor);
-  return withDb(actor, async (tx) => {
-    const r = await tx`update client_profiles set archived_at = null where id = ${clientId} and archived_at is not null returning business_name`;
-    if (r.count === 0) throw new AppError("This client is not archived.");
-    await audit(tx, actor, "client.unarchived", "client", clientId, null, { business_name: r[0].business_name });
   });
 }
