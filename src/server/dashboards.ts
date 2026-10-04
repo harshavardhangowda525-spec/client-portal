@@ -83,7 +83,7 @@ export async function adminDashboard(actor: Actor) {
     const projects = await tx<{ id: string; name: string; status: string; current_stage: string | null; target_delivery_date: string | null;
       business_name: string; client_id: string; is_sample: boolean }[]>`
       select p.id, p.name, p.status, p.current_stage, p.target_delivery_date, c.business_name, p.client_id, p.is_sample
-      from projects p join client_profiles c on c.id = p.client_id order by p.updated_at desc`;
+      from projects p join client_profiles c on c.id = p.client_id where c.archived_at is null order by p.updated_at desc`;
     const ms = await tx<(Milestone & { project_id: string })[]>`select * from milestones order by project_id, position`;
     const waiting = await tx<{ project_id: string; n: number }[]>`
       select project_id, count(*)::int as n from approval_requests where status = 'pending' group by project_id`;

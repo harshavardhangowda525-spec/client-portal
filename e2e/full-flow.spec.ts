@@ -215,6 +215,8 @@ test("complete client project workflow", async ({ browser }) => {
   // --- Admin: finish all milestones and complete the project (handover)
   await admin.goto(`${projectUrl}/milestones`);
   const editButtons = admin.getByRole("button", { name: /^Edit / });
+  // count() does not wait, so make sure the streamed milestone list has rendered first.
+  await expect(editButtons).toHaveCount(14);
   const count = await editButtons.count();
   for (let i = 0; i < count; i++) {
     const btn = editButtons.nth(i);
