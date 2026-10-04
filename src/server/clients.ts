@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { withDb, SYSTEM, assertAdmin, audit, getProjectFor, type Actor, type Tx } from "./core";
 import { parse, text, optText, email as emailSchema, optDate, uuid } from "./validate";
-import { DEFAULT_MILESTONES } from "./defaults";
+import { DEFAULT_MILESTONES, DEFAULT_APP_MILESTONES } from "./defaults";
 import { AppError, notFound, conflict } from "@/lib/errors";
 import { randomToken, sha256, hashPassword, verifyPassword } from "@/lib/crypto";
 import { appUrl, company } from "@/lib/config";
@@ -89,7 +89,7 @@ const projectSchema = z.object({
   target_delivery_date: optDate,
 });
 
-export async function createProject(actor: Actor, clientId: string, input: unknown, opts: { defaultMilestones?: boolean } = {}) {
+export async function createProject(actor: Actor, clientId: string, input: unknown, opts: { defaultMilestones?: boolean; milestonePlan?: "website" | "app" } = {}) {
   assertAdmin(actor);
   const d = parse(projectSchema, input);
   if (d.start_date && d.target_delivery_date && d.target_delivery_date < d.start_date) {
@@ -101,7 +101,8 @@ export async function createProject(actor: Actor, clientId: string, input: unkno
     const [p] = await tx<{ id: string }[]>`
       insert into projects ${tx({ ...d, client_id: clientId, current_stage: "Proposal and quotation" })} returning id`;
     if (opts.defaultMilestones !== false) {
-      const rows = DEFAULT_MILESTONES.map((m, i) => ({ project_id: p.id, position: i + 1, ...m }));
+      const plan = opts.milestonePlan === "app" ? DEFAULT_APP_MILESTONES : DEFAULT_MILESTONES;
+      const rows = plan.map((m, i) => ({ project_id: p.id, position: i + 1, ...m }));
       await tx`insert into milestones ${tx(rows)}`;
     }
     // Existing portal users of this client automatically get access to the new project.
@@ -163,8 +164,12 @@ export async function commenceProject(actor: Actor, projectId: string, input: un
     if (!["quotation_accepted", "proposal", "on_hold"].includes(p.status)) {
       throw new AppError("This project has already been activated.");
     }
-    const [accepted] = await tx`select 1 from quotation_versions where project_id = ${projectId} and status = 'accepted' limit 1`;
-    if (!accepted) throw new AppError("The client must accept a quotation before the project can commence.");
+    const [accepted] = await tx`
+      select 1 from quotation_versions where project_id = ${projectId} and status = 'accepted'
+      union all
+      select 1 from proposal_versions v join proposals p on p.id = v.proposal_id where p.project_id = ${projectId} and v.status = 'accepted'
+      limit 1`;
+    if (!accepted) throw new AppError("The client must accept a quotation or proposal before the project can commence.");
     await tx`update projects set status = 'active', commenced_at = now(),
                start_date = coalesce(${d.start_date}, start_date, current_date),
                target_delivery_date = coalesce(${d.target_delivery_date}, target_delivery_date),

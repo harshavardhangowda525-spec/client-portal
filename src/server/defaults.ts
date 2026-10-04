@@ -58,3 +58,19 @@ export const DEFAULT_TEMPLATE = {
     valid_days: 15,
   },
 };
+
+export const DEFAULT_APP_MILESTONES: { title: string; description: string; weight: number }[] = [
+  { title: "Proposal accepted", description: "The proposal has been accepted and the engagement is confirmed.", weight: 2 },
+  { title: "Requirements and planning", description: "Features, user flows, screens and integrations are finalised.", weight: 6 },
+  { title: "Advance payment confirmed", description: "The initial advance has been received and confirmed.", weight: 2 },
+  { title: "UI/UX design", description: "App screens, navigation and visual design.", weight: 12 },
+  { title: "App frontend development", description: "Building the app screens and interactions.", weight: 22 },
+  { title: "Backend, API and database", description: "Server, data storage and integrations.", weight: 18 },
+  { title: "Login and user features", description: "Authentication, profiles and roles.", weight: 8 },
+  { title: "Client review and feedback", description: "You test a preview build and share feedback.", weight: 6 },
+  { title: "Revisions", description: "Agreed changes from your feedback are implemented.", weight: 6 },
+  { title: "Testing and bug fixes", description: "Device, performance and security testing.", weight: 8 },
+  { title: "Final payment", description: "The remaining balance is settled.", weight: 2 },
+  { title: "Store release preparation", description: "Store listings, builds and submission.", weight: 5 },
+  { title: "Project handover", description: "Source, credentials, documentation and training.", weight: 3 },
+];

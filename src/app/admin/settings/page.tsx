@@ -18,7 +18,8 @@ export default async function SettingsPage() {
   const i = integrations();
   return (
     <>
-      <PageHead title="Settings" sub="Integrations, security status and your account." />
+      <PageHead title="Settings" sub="Integrations, security status and your account."
+        actions={<a href="/admin/settings/pricing" className="btn">Pricing configuration →</a>} />
       <div className="grid grid-2" style={{ alignItems: "start" }}>
         <Panel title="Integrations" sub="Configured with environment variables on the server. Nothing is reported as delivered unless the provider accepted it.">
           <div className="list">

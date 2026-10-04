@@ -116,3 +116,12 @@ export const UPDATE_KINDS: Record<string, string> = {
   handover: "Handover",
   general: "General",
 };
+
+export const PROJECT_TYPE_LABELS: Record<string, string> = {
+  website: "Website", android_app: "Android app", ios_app: "iOS app", cross_platform_app: "Cross-platform app",
+  website_app: "Website + app", custom_software: "Custom software",
+};
+
+export function periodLabel(billing: string, period: string | null) {
+  return billing === "one_time" ? "One-time" : period === "annual" ? "Per year" : "Per month";
+}
