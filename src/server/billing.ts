@@ -3,6 +3,7 @@ import { withDb, assertAdmin, audit, getProjectFor, nextNumber, type Actor, type
 import { parse, text, optText, optDate, date, uuid } from "./validate";
 import { notifyProjectClients } from "./notify";
 import { acceptedVersion } from "./quotations";
+import { acceptedProposalForProject } from "./proposals";
 import { AppError, notFound } from "@/lib/errors";
 import { fromPaise, toPaise } from "@/lib/money";
 import { todayISO } from "@/lib/progress";
@@ -18,6 +19,25 @@ export type Payment = {
   confirmed_at: Date | null; created_at: Date;
 };
 
+type Baseline = {
+  source: "quotation" | "proposal"; id: string; number: string; version_no: number; total: number; currency: string;
+  payment_terms: { label: string; percent: number; due: string; amount: number }[];
+};
+
+/** The agreed commercial terms for a project: the accepted quotation, or else the accepted proposal. */
+async function acceptedBaseline(tx: Tx, projectId: string): Promise<Baseline | null> {
+  const q = await acceptedVersion(tx, projectId);
+  if (q) {
+    return { source: "quotation", id: q.id, number: q.number, version_no: q.version_no, total: Number(q.total), currency: q.currency,
+      payment_terms: q.payment_terms.map((t) => ({ label: t.label, percent: Number(t.percent), due: t.due, amount: Number(t.amount ?? 0) })) };
+  }
+  const p = await acceptedProposalForProject(tx, projectId);
+  if (!p) return null;
+  const total = Number(p.total);
+  return { source: "proposal", id: p.id, number: p.number, version_no: p.version_no, total, currency: p.currency,
+    payment_terms: p.milestones.map((m) => ({ label: m.label, percent: total > 0 ? Math.round((Number(m.amount) / total) * 10000) / 100 : 0, due: m.due ?? "", amount: Number(m.amount) })) };
+}
+
 async function recomputeInvoice(tx: Tx, invoiceId: string) {
   await tx`update invoices i set status = case
              when i.status in ('draft', 'void') then i.status
@@ -31,7 +51,7 @@ async function recomputeInvoice(tx: Tx, invoiceId: string) {
 export async function getBilling(actor: Actor, projectId: string) {
   return withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
-    const quote = await acceptedVersion(tx, projectId);
+    const quote = await acceptedBaseline(tx, projectId);
     const today = todayISO();
     const invoiceRows = await tx<Omit<Invoice, "paid" | "balance" | "overdue">[]>`
       select * from invoices where project_id = ${projectId} order by created_at`;
@@ -50,7 +70,7 @@ export async function getBilling(actor: Actor, projectId: string) {
     const contractTotal = quote ? Number(quote.total) : null;
     const terms = quote?.payment_terms ?? [];
     return {
-      quotation: quote ? { id: quote.id, quotation_id: quote.quotation_id, number: quote.number, version_no: quote.version_no, total: Number(quote.total), currency: quote.currency } : null,
+      quotation: quote ? { id: quote.id, source: quote.source, number: quote.number, version_no: quote.version_no, total: Number(quote.total), currency: quote.currency } : null,
       advanceRequired: terms[0]?.amount ?? null,
       advanceLabel: terms[0]?.label ?? null,
       terms: terms.map((t) => ({ ...t, invoice: invoices.find((i) => i.payment_term_label === t.label && i.status !== "void") ?? null })),
@@ -78,10 +98,11 @@ export async function createInvoice(actor: Actor, projectId: string, input: unkn
   const d = parse(invoiceSchema, input);
   return withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
-    const quote = await acceptedVersion(tx, projectId);
+    const base = await acceptedBaseline(tx, projectId);
     const number = await nextNumber(tx, "INV");
     const [i] = await tx<{ id: string }[]>`
-      insert into invoices ${tx({ ...d, project_id: projectId, number, quotation_version_id: quote?.id ?? null, currency: quote?.currency ?? "INR", created_by: actor.userId })}
+      insert into invoices ${tx({ ...d, project_id: projectId, number, currency: base?.currency ?? "INR", created_by: actor.userId,
+        quotation_version_id: base?.source === "quotation" ? base.id : null, proposal_version_id: base?.source === "proposal" ? base.id : null })}
       returning id`;
     await audit(tx, actor, "invoice.created", "invoice", i.id, projectId, { number, amount: d.amount });
     return i.id;
@@ -94,8 +115,8 @@ export async function createInvoiceFromTerm(actor: Actor, projectId: string, ter
   const due = parse(optDate, dueDate ?? null);
   const term = await withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
-    const quote = await acceptedVersion(tx, projectId);
-    if (!quote) throw new AppError("There is no accepted quotation for this project yet.");
+    const quote = await acceptedBaseline(tx, projectId);
+    if (!quote) throw new AppError("There is no accepted quotation or proposal for this project yet.");
     const t = quote.payment_terms[termIndex];
     if (!t || !t.amount) throw new AppError("Payment milestone not found.");
     const [exists] = await tx`select number from invoices where project_id = ${projectId} and payment_term_label = ${t.label} and status <> 'void'`;
@@ -104,7 +125,7 @@ export async function createInvoiceFromTerm(actor: Actor, projectId: string, ter
   });
   return createInvoice(actor, projectId, {
     title: `${term.t.label} — ${term.quote.number}`,
-    description: `${term.t.percent}% of quotation ${term.quote.number} (v${term.quote.version_no}). Due: ${term.t.due}.`,
+    description: `${term.t.percent}% of ${term.quote.source} ${term.quote.number} (v${term.quote.version_no}).${term.t.due ? ` Due: ${term.t.due}.` : ""}`,
     amount: term.t.amount, due_date: due, payment_term_label: term.t.label,
   });
 }

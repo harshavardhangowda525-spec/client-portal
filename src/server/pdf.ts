@@ -19,20 +19,33 @@ function clean(s: string | null | undefined): string {
     .replace(/[•·]/g, "-").replace(/\t/g, "  ").replace(/[^\x0A\x20-\x7E\xA0-\xFF]/g, "?");
 }
 
+/** Business identity printed on documents (from Settings, falling back to environment defaults). */
+export type PdfBrand = {
+  name: string; tagline?: string | null; email?: string | null; phone?: string | null; address?: string | null; tax_id?: string | null;
+  logo?: { mime_type: string; data: Buffer } | null;
+};
+
+function defaultBrand(): PdfBrand {
+  const c = company();
+  return { name: c.name, email: c.email, phone: c.phone, address: c.address, tax_id: c.taxId };
+}
+
 class Writer {
   doc!: PDFDocument;
+  brand!: PdfBrand;
   page!: PDFPage;
   font!: PDFFont;
   bold!: PDFFont;
   y = 0;
   pageNo = 0;
 
-  static async create(title: string) {
+  static async create(title: string, brand?: PdfBrand) {
     const w = new Writer();
+    w.brand = brand ?? defaultBrand();
     w.doc = await PDFDocument.create();
     w.doc.setTitle(clean(title));
-    w.doc.setAuthor(clean(company().name));
-    w.doc.setCreator(clean(company().name));
+    w.doc.setAuthor(clean(w.brand.name));
+    w.doc.setCreator(clean(w.brand.name));
     w.font = await w.doc.embedFont(StandardFonts.Helvetica);
     w.bold = await w.doc.embedFont(StandardFonts.HelveticaBold);
     w.newPage();
@@ -43,7 +56,7 @@ class Writer {
     this.page = this.doc.addPage([PAGE.w, PAGE.h]);
     this.pageNo++;
     this.y = PAGE.h - PAGE.m;
-    this.page.drawText(clean(`${company().name}  ·  Page ${this.pageNo}`).replace("?", "-"), { x: PAGE.m, y: 24, size: 8, font: this.font, color: MUTED });
+    this.page.drawText(clean(`${this.brand.name}  -  Page ${this.pageNo}`), { x: PAGE.m, y: 24, size: 8, font: this.font, color: MUTED });
   }
 
   ensure(h: number) {
@@ -103,14 +116,27 @@ class Writer {
     this.y -= 8;
   }
 
-  header(docType: string, number: string, statusLabel?: string) {
-    const co = company();
+  async header(docType: string, number: string, statusLabel?: string) {
+    const co = this.brand;
     this.page.drawRectangle({ x: 0, y: PAGE.h - 110, width: PAGE.w, height: 110, color: NAVY });
     this.page.drawRectangle({ x: 0, y: PAGE.h - 112, width: PAGE.w, height: 2, color: BLUE });
-    this.page.drawText(clean(co.name), { x: PAGE.m, y: PAGE.h - 52, size: 18, font: this.bold, color: rgb(1, 1, 1) });
-    const sub = [co.email, co.phone].filter(Boolean).join("  |  ") || "Websites, apps & digital solutions";
-    this.page.drawText(clean(sub), { x: PAGE.m, y: PAGE.h - 70, size: 9, font: this.font, color: rgb(0.75, 0.8, 0.9) });
-    if (co.address) this.page.drawText(clean(co.address).slice(0, 90), { x: PAGE.m, y: PAGE.h - 84, size: 8, font: this.font, color: rgb(0.65, 0.7, 0.8) });
+    let x = PAGE.m;
+    if (co.logo) {
+      try {
+        const img = co.logo.mime_type === "image/png" ? await this.doc.embedPng(co.logo.data) : await this.doc.embedJpg(co.logo.data);
+        const h = 46;
+        const w = Math.min(120, (img.width / img.height) * h);
+        this.page.drawImage(img, { x, y: PAGE.h - 80, width: w, height: (w / img.width) * img.height });
+        x += w + 14;
+      } catch {
+        // An unreadable logo must not block the document; fall back to text only.
+      }
+    }
+    this.page.drawText(clean(co.name), { x, y: PAGE.h - 48, size: 18, font: this.bold, color: rgb(1, 1, 1) });
+    if (co.tagline) this.page.drawText(clean(co.tagline), { x, y: PAGE.h - 63, size: 9, font: this.font, color: rgb(0.55, 0.75, 1) });
+    const sub = [co.email, co.phone].filter(Boolean).join("  |  ");
+    if (sub) this.page.drawText(clean(sub), { x, y: PAGE.h - 78, size: 8.5, font: this.font, color: rgb(0.75, 0.8, 0.9) });
+    if (co.address) this.page.drawText(clean(co.address).slice(0, 80), { x, y: PAGE.h - 91, size: 8, font: this.font, color: rgb(0.65, 0.7, 0.8) });
     this.right(docType.toUpperCase(), PAGE.w - PAGE.m, PAGE.h - 50, 16, true, rgb(1, 1, 1));
     this.right(number, PAGE.w - PAGE.m, PAGE.h - 68, 10, false, rgb(0.75, 0.8, 0.9));
     if (statusLabel) this.right(statusLabel, PAGE.w - PAGE.m, PAGE.h - 84, 9, true, rgb(0.55, 0.75, 1));
@@ -199,10 +225,11 @@ export async function quotationPdf(
   v: QuoteVersion & { number: string; title: string },
   items: QuoteItem[],
   acceptance: { signer_name: string; accepted_at: Date; content_hash: string; user_email: string } | null,
+  brand?: PdfBrand,
 ) {
-  const w = await Writer.create(`Quotation ${v.number}`);
+  const w = await Writer.create(`Quotation ${v.number}`, brand);
   const m = (n: number) => formatMoneyPlain(Number(n), v.currency);
-  w.header("Quotation", `${v.number}  ·  Version ${v.version_no}`, QUOTE_STATUS[v.status] ?? v.status);
+  await w.header("Quotation", `${v.number}  ·  Version ${v.version_no}`, QUOTE_STATUS[v.status] ?? v.status);
   const c = v.client_snapshot;
   w.twoCol(
     [["Prepared for", `${c.owner_name ?? ""}${c.business_name ? `, ${c.business_name}` : ""}`], ["Contact", [c.email, c.phone].filter(Boolean).join("  |  ")], ["Project", v.title]],
@@ -250,15 +277,15 @@ export async function invoicePdf(data: {
   project: { name: string };
   payments: { amount: number; paid_on: string | null; method: string; reference: string | null; receipt_number: string | null }[];
   paid: number; balance: number;
-}) {
+}, brand?: PdfBrand) {
   const { invoice: i, client: c } = data;
   const m = (n: number) => formatMoneyPlain(Number(n), i.currency);
-  const w = await Writer.create(`Invoice ${i.number}`);
-  w.header("Invoice", i.number, INVOICE_STATUS[i.status] ?? i.status);
-  const co = company();
+  const w = await Writer.create(`Invoice ${i.number}`, brand);
+  await w.header("Invoice", i.number, INVOICE_STATUS[i.status] ?? i.status);
+  const taxId = w.brand.tax_id;
   w.twoCol(
     [["Billed to", `${c.owner_name}, ${c.business_name}`], ["Contact", [c.email, c.phone].filter(Boolean).join("  |  ")], ["Project", data.project.name]],
-    [["Invoice date", fmtDate(i.issue_date)], ["Due date", fmtDate(i.due_date)], ...(co.taxId ? [["Tax ID", co.taxId] as [string, string]] : [])],
+    [["Invoice date", fmtDate(i.issue_date)], ["Due date", fmtDate(i.due_date)], ...(taxId ? [["Tax ID", taxId] as [string, string]] : [])],
   );
   w.heading("Details");
   w.table([{ label: "Description", width: 400 }, { label: "Amount", width: 99, align: "right" }], [[i.title, m(i.amount)]], [i.description]);
@@ -277,10 +304,10 @@ export async function receiptPdf(data: {
   payment: { receipt_number: string | null; amount: number; currency: string; paid_on: string | null; method: string; reference: string | null; invoice_number: string | null; status: string; confirmed_at: Date | null };
   client: { business_name: string; owner_name: string; email: string };
   project: { name: string };
-}) {
+}, brand?: PdfBrand) {
   const p = data.payment;
-  const w = await Writer.create(`Receipt ${p.receipt_number}`);
-  w.header("Payment receipt", p.receipt_number ?? "-", "Confirmed");
+  const w = await Writer.create(`Receipt ${p.receipt_number}`, brand);
+  await w.header("Payment receipt", p.receipt_number ?? "-", "Confirmed");
   w.twoCol(
     [["Received from", `${data.client.owner_name}, ${data.client.business_name}`], ["Project", data.project.name], ["Against invoice", p.invoice_number ?? "-"]],
     [["Payment date", fmtDate(p.paid_on)], ["Method", PAYMENT_METHODS[p.method] ?? p.method], ["Reference", p.reference ?? "-"]],
@@ -288,5 +315,158 @@ export async function receiptPdf(data: {
   w.y -= 10;
   w.totals([["Amount received", formatMoneyPlain(Number(p.amount), p.currency), true]]);
   w.text(`Confirmed on ${fmtDateTime(p.confirmed_at)}. Thank you for your payment.`, { size: 9.5, color: MUTED });
+  return w.save();
+}
+
+// ---------------------------------------------------------------------------
+// Proposal
+// ---------------------------------------------------------------------------
+type PItem = { section: string; name: string; description: string | null; quantity: number; unit: string | null; unit_price: number | null; amount: number | null;
+  billing: string; period: string | null; charged: boolean; included_in_package: boolean; payer: string | null; renewal_date: string | null; details: Record<string, unknown> };
+type PVersion = {
+  version_no: number; status: string; currency: string; valid_until: string; pricing_mode: string; package_snapshot: { name: string; price: number } | null;
+  base_amount: number; addons_amount: number; custom_amount: number; external_amount: number; subtotal: number; discount_amount: number; discount_percent: number;
+  discount_type: string; taxable_amount: number; tax_label: string; tax_rate: number; tax_amount: number; total: number; recurring_monthly: number; recurring_annual: number;
+  initial_payable: number; has_tbc_items: boolean; milestones: { label: string; due: string | null; amount: number }[]; created_at: Date;
+  content: {
+    contact: { name: string; email: string; phone?: string | null }; title: string; project_type: string; description?: string | null; requirements?: string | null;
+    target_launch_date?: string | null; executive_summary?: string | null; recommended_solution?: string | null;
+    scope_details?: { platforms?: string[]; pages?: number | null; screens?: number | null; integrations?: number | null; roles?: number | null; backend?: string | null; authentication?: string | null; storage?: string | null };
+    warranty: { days: number; terms?: string | null };
+    scope: { objectives?: string | null; features: string[]; pages_screens: string[]; design_requirements?: string | null; deliverables: string[]; client_responsibilities: string[];
+      content_requirements?: string | null; revisions: number; milestones: { title: string; estimate?: string | null }[]; timeline?: string | null;
+      acceptance_criteria?: string | null; exclusions: string[]; assumptions: string[] };
+    terms?: string | null;
+  };
+};
+
+export const PROJECT_TYPE_LABELS: Record<string, string> = {
+  website: "Website", android_app: "Android app", ios_app: "iOS app", cross_platform_app: "Cross-platform app",
+  website_app: "Website + app", custom_software: "Custom software",
+};
+
+export function periodLabel(billing: string, period: string | null) {
+  return billing === "one_time" ? "One-time" : period === "annual" ? "Per year" : "Per month";
+}
+
+export async function proposalPdf(
+  p: { number: string; title: string; client: { business_name: string; owner_name: string; email: string; phone: string | null } },
+  v: PVersion, items: PItem[],
+  acceptance: { signer_name: string; accepted_at: Date; content_hash: string; user_email: string } | null,
+  brand?: PdfBrand,
+) {
+  const w = await Writer.create(`Proposal ${p.number}`, brand);
+  const m = (n: number) => formatMoneyPlain(Number(n), v.currency);
+  const c = v.content;
+  await w.header("Proposal", `${p.number}  ·  Version ${v.version_no}`);
+  w.twoCol(
+    [["Prepared for", `${c.contact.name}, ${p.client.business_name}`], ["Contact", [c.contact.email, c.contact.phone].filter(Boolean).join("  |  ")], ["Project", `${p.title} (${PROJECT_TYPE_LABELS[c.project_type] ?? c.project_type})`]],
+    [["Proposal date", fmtDate(v.created_at)], ["Valid until", fmtDate(v.valid_until)], ["Target launch", c.target_launch_date ? fmtDate(c.target_launch_date) : "To be agreed"]],
+  );
+  const section = (title: string, body?: string | null) => { if (body) { w.heading(title); w.text(body, { size: 9.5 }); } };
+  const bullets = (title: string, list?: string[]) => { if (list?.length) { w.heading(title); w.bullets(list); } };
+  section("Executive summary", c.executive_summary);
+  section("Your requirements", c.requirements);
+  section("Recommended solution", c.recommended_solution);
+  section("Project description", c.description);
+  const sd = c.scope_details;
+  if (sd && (sd.platforms?.length || sd.screens || sd.pages || sd.integrations || sd.roles || sd.backend)) {
+    w.heading("Technical scope");
+    w.bullets([
+      sd.platforms?.length ? `Platforms: ${sd.platforms.map((x) => (x === "ios" ? "iOS" : x[0].toUpperCase() + x.slice(1))).join(", ")}` : "",
+      sd.pages ? `Pages: ${sd.pages}` : "", sd.screens ? `Screens: ${sd.screens}` : "", sd.integrations ? `Integrations: ${sd.integrations}` : "",
+      sd.roles ? `User roles: ${sd.roles}` : "", sd.backend ? `Backend complexity: ${sd.backend}` : "", sd.authentication ? `Authentication: ${sd.authentication}` : "",
+      sd.storage ? `Storage: ${sd.storage}` : "",
+    ].filter(Boolean));
+  }
+  section("Objectives", c.scope.objectives);
+  bullets("Features included", c.scope.features);
+  bullets("Pages / screens included", c.scope.pages_screens);
+  section("Design and functionality", c.scope.design_requirements);
+  bullets("Deliverables", c.scope.deliverables);
+
+  // Pricing — development
+  w.heading("Price breakdown — development (one-time)");
+  const base = items.find((i) => i.section === "base");
+  const incl = items.filter((i) => i.section === "inclusion");
+  const dev = items.filter((i) => i.section === "addon" || i.section === "custom");
+  const rows: string[][] = [];
+  const subs: (string | null)[] = [];
+  if (base) { rows.push([base.name, "1", m(base.unit_price ?? 0), m(base.amount ?? 0)]); subs.push("Base package"); }
+  for (const i of incl) { rows.push([`  Included: ${i.name}`, "", m(i.amount ?? 0), "Included"]); subs.push(null); }
+  for (const i of dev) {
+    rows.push([i.name, String(Number(i.quantity)), i.unit_price == null ? "To be confirmed" : m(i.unit_price), i.amount == null ? "To be confirmed" : m(i.amount)]);
+    subs.push(i.section === "addon" ? `Optional add-on${i.description ? ` - ${i.description}` : ""}` : i.description);
+  }
+  if (rows.length) w.table([{ label: "Item", width: 275 }, { label: "Qty", width: 45, align: "right" }, { label: "Unit price", width: 90, align: "right" }, { label: "Amount", width: 89, align: "right" }], rows, subs);
+
+  const ext = items.filter((i) => i.section === "external");
+  if (ext.length) {
+    w.heading("Domain, hosting and third-party costs");
+    w.table([{ label: "Service", width: 200 }, { label: "Billing", width: 85 }, { label: "Paid by", width: 110 }, { label: "Amount", width: 104, align: "right" }],
+      ext.map((i) => [i.name, periodLabel(i.billing, i.period), i.included_in_package ? "Included" : i.payer === "client" ? "Client, to provider" : "Billed by us",
+        i.amount == null ? "To be confirmed" : m(i.amount)]),
+      ext.map((i) => (i.renewal_date ? `Renews ${fmtDate(i.renewal_date)}` : null)));
+    w.text("Provider fees are set by the providers and may change. Items marked “To be confirmed” are not included in the totals.", { size: 8.5, color: MUTED });
+  }
+
+  w.heading("Pricing summary");
+  const t: [string, string, boolean?][] = [];
+  if (Number(v.base_amount) > 0) t.push(["Base package", m(v.base_amount)]);
+  if (Number(v.addons_amount) > 0) t.push(["Additional features", m(v.addons_amount)]);
+  if (Number(v.custom_amount) > 0) t.push(["Custom development", m(v.custom_amount)]);
+  if (Number(v.external_amount) > 0) t.push(["External services (one-time)", m(v.external_amount)]);
+  t.push(["One-time subtotal", m(v.subtotal)]);
+  if (Number(v.discount_amount) > 0) t.push([`Discount (${Number(v.discount_percent)}%)`, `- ${m(v.discount_amount)}`]);
+  if (Number(v.tax_rate) > 0) { t.push(["Taxable amount", m(v.taxable_amount)]); t.push([`${v.tax_label} (${Number(v.tax_rate)}%)`, m(v.tax_amount)]); }
+  t.push(["Final one-time total", m(v.total), true]);
+  w.totals(t);
+  if (Number(v.recurring_monthly) > 0 || Number(v.recurring_annual) > 0) {
+    w.heading("Recurring charges (not included in the one-time total)");
+    const rec = items.filter((i) => i.billing === "recurring" && i.charged);
+    w.table([{ label: "Service", width: 300 }, { label: "Billing", width: 100 }, { label: "Amount", width: 99, align: "right" }],
+      rec.map((i) => [i.name, periodLabel(i.billing, i.period), m(i.amount ?? 0)]));
+    w.totals([
+      ...(Number(v.recurring_monthly) > 0 ? [["Recurring monthly total", m(v.recurring_monthly)] as [string, string]] : []),
+      ...(Number(v.recurring_annual) > 0 ? [["Recurring annual total", m(v.recurring_annual)] as [string, string]] : []),
+    ]);
+  }
+  if (v.milestones.length) {
+    w.heading("Payment schedule");
+    w.table([{ label: "Milestone", width: 220 }, { label: "When", width: 180 }, { label: "Amount", width: 99, align: "right" }],
+      v.milestones.map((x) => [x.label, x.due ?? "", m(x.amount)]));
+    w.text(`Initial amount payable: ${m(v.initial_payable)}. Payments are recorded only after they are received and confirmed.`, { size: 8.5, color: MUTED });
+  }
+  if (c.scope.milestones.length || c.scope.timeline) {
+    w.heading("Estimated delivery timeline");
+    if (c.scope.milestones.length) w.bullets(c.scope.milestones.map((x) => `${x.title}${x.estimate ? ` - ${x.estimate}` : ""}`));
+    if (c.scope.timeline) w.text(c.scope.timeline, { size: 9.5 });
+    w.text("Timelines are estimates and depend on timely feedback, content and approvals.", { size: 8.5, color: MUTED });
+  }
+  bullets("Client responsibilities", c.scope.client_responsibilities);
+  section("Content and assets required", c.scope.content_requirements);
+  section("Testing and acceptance", c.scope.acceptance_criteria);
+  w.heading("Revisions"); w.text(`${c.scope.revisions} round${c.scope.revisions === 1 ? "" : "s"} of revisions included.`, { size: 9.5 });
+  const maint = items.find((i) => i.section === "maintenance");
+  w.heading("Warranty and maintenance");
+  w.text(`${c.warranty.days}-day post-launch warranty. ${c.warranty.terms ?? ""}`, { size: 9.5 });
+  if (maint) {
+    const d = maint.details as Record<string, string | null>;
+    w.text(`${maint.name}: ${m(maint.amount ?? 0)} ${maint.period === "annual" ? "per year" : "per month"}.`, { size: 9.5, bold: true });
+    w.bullets([d.included_hours, d.bug_fix_coverage && `Bug fixes: ${d.bug_fix_coverage}`, d.update_frequency && `Updates: ${d.update_frequency}`,
+      d.backup_monitoring && `Backups and monitoring: ${d.backup_monitoring}`, d.support_channel && `Support: ${d.support_channel}`,
+      d.response_time && `Response time: ${d.response_time}`, d.exclusions && `Not included: ${d.exclusions}`].filter(Boolean) as string[]);
+  }
+  bullets("Exclusions", c.scope.exclusions);
+  bullets("Assumptions", c.scope.assumptions);
+  section("Terms and conditions", c.terms);
+  w.heading("Acceptance");
+  if (acceptance) {
+    w.text(`Accepted electronically by ${acceptance.signer_name} (${acceptance.user_email}) on ${fmtDateTime(acceptance.accepted_at)} - version ${v.version_no}.`, { size: 9.5, bold: true });
+    w.text(`Content fingerprint (SHA-256): ${acceptance.content_hash}`, { size: 8, color: MUTED });
+    w.text("This is a record of electronic acceptance through the client portal, not a certified digital signature.", { size: 8, color: MUTED });
+  } else {
+    w.text(`This proposal is valid until ${fmtDate(v.valid_until)}. Review and respond securely in your client portal.`, { size: 9.5, color: MUTED });
+  }
   return w.save();
 }

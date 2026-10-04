@@ -31,3 +31,12 @@ export async function notifyProjectClients(tx: Tx, actor: Actor | null, projectI
     await insertFor(tx, members.map((m) => m.id).filter((id) => id !== actor?.userId), { ...n, projectId });
   });
 }
+
+/** Notify every active portal user of a client (proposals exist before any project does). */
+export async function notifyClientUsers(tx: Tx, actor: Actor | null, clientId: string, n: Note) {
+  await elevated(tx, actor, async () => {
+    const users = await tx<{ id: string }[]>`
+      select id from users where client_id = ${clientId} and role = 'client' and disabled_at is null`;
+    await insertFor(tx, users.map((u) => u.id).filter((id) => id !== actor?.userId), n);
+  });
+}

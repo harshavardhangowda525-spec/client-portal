@@ -69,7 +69,7 @@ export async function audit(
 }
 
 /** Atomic yearly counter, e.g. IWA-Q-2026-0001. */
-export async function nextNumber(tx: Tx, name: "Q" | "INV" | "RCPT"): Promise<string> {
+export async function nextNumber(tx: Tx, name: "Q" | "INV" | "RCPT" | "P"): Promise<string> {
   const year = new Date().getFullYear();
   const [row] = await tx<{ value: number }[]>`
     insert into counters (name, year, value) values (${name}, ${year}, 1)
