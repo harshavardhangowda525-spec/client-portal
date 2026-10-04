@@ -73,6 +73,8 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
+For later migrations, such as `003_client_archive.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
 ## Local development
@@ -100,6 +102,13 @@ The tests cover:
 - immutability of accepted quotations and the audit log
 - rules that stop payments being marked paid without confirmation
 - sample-data removal
+
+## Deleting clients
+Each client page has a **Delete client** section, also reachable from the trash icon in the Clients list. You confirm by typing the business name.
+
+- **Clients with no signed or financial records** (for example test clients or dropped leads) are deleted permanently. This removes their projects, proposals, quotations, draft invoices, pending payments, documents, messages and portal login.
+- **Clients with an accepted quotation or proposal, an issued invoice, or a confirmed payment** are archived instead. They are hidden from lists and signed out, and all their records are kept. Use **Clients → Show archived → Unarchive** to bring one back; portal access stays revoked until you restore it.
+- Either way, the audit log records who deleted or archived the client.
 
 ## Workflow
 
