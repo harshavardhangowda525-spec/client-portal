@@ -106,9 +106,11 @@ The tests cover:
 ## Deleting clients
 Each client page has a **Delete client** section, also reachable from the trash icon in the Clients list. You confirm by typing the business name.
 
-- **Clients with no signed or financial records** (for example test clients or dropped leads) are deleted permanently. This removes their projects, proposals, quotations, draft invoices, pending payments, documents, messages and portal login.
-- **Clients with an accepted quotation or proposal, an issued invoice, or a confirmed payment** are archived instead. They are hidden from lists and signed out, and all their records are kept. Use **Clients → Show archived → Unarchive** to bring one back; portal access stays revoked until you restore it.
-- Either way, the audit log records who deleted or archived the client.
+Deleting permanently removes the client and **all** of their data: projects, proposals, quotations (including accepted ones and their acceptance records), invoices, payments, documents, messages, invitations and portal logins. The client is signed out immediately, and this cannot be undone.
+
+If the client has accepted quotations or proposals, issued invoices or confirmed payments, you get an extra warning. Download any PDFs you need for your accounts first.
+
+Only an audit-log entry remains, recording who deleted which client and when.
 
 ## Workflow
 

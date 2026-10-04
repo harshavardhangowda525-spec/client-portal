@@ -193,12 +193,7 @@ export async function saveVersionAsTemplateAction(versionId: string, _: ActionSt
 }
 
 export async function deleteClientAction(clientId: string, _: ActionState, fd: FormData): Promise<ActionState> {
-  let result = "";
-  const r = await run("admin", async (a) => { result = (await C.deleteClient(a, clientId, String(fd.get("confirm_name") ?? ""))).result; });
-  if (r?.ok) redirect(result === "deleted" ? "/admin/clients?deleted=1" : "/admin/clients?archived=1&done=1");
+  const r = await run("admin", async (a) => { await C.deleteClient(a, clientId, String(fd.get("confirm_name") ?? "")); });
+  if (r?.ok) redirect("/admin/clients?deleted=1");
   return r;
-}
-
-export async function unarchiveClientAction(clientId: string) {
-  return run("admin", async (a) => { await C.unarchiveClient(a, clientId); return "Client restored to the active list. Portal access is still revoked — restore it below if needed."; });
 }

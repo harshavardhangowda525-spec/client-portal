@@ -70,46 +70,47 @@ describe("deleting clients", () => {
     expect(await count`select count(*) as n from client_profiles where id = ${a.clientId}`).toBe(1);
   });
 
-  it("archives (never deletes) a client with an accepted quotation, keeping every record", async () => {
+  it("deletes everything even with an accepted quotation, issued invoice and confirmed payment", async () => {
     const a = await makeClientWithProject(admin, "Signed");
+    const other = await makeClientWithProject(admin, "Neighbour");
     const { versionId } = await Q.createQuotation(admin, a.projectId, {});
     await Q.sendQuotation(admin, versionId);
     const { hash } = await Q.getVersion(a.client, versionId);
     await Q.acceptQuotation(a.client, versionId, { signer_name: "Signed Owner", confirm_scope: true, confirm_terms: true, content_hash: hash });
+    const inv = await B.createInvoiceFromTerm(admin, a.projectId, 0);
+    await B.issueInvoice(admin, inv);
+    const pay = await B.recordPayment(admin, a.projectId, { invoice_id: inv, amount: 500, method: "upi", paid_on: "2026-10-01", reference: "UTR1", status: "confirmed" });
 
     const im = await C.clientDeletionImpact(admin, a.clientId);
-    expect(im.protectedRecords).toEqual(["1 accepted quotation"]);
-    const r = await C.deleteClient(admin, a.clientId, "Signed Bistro");
-    expect(r.result).toBe("archived");
-    expect(await count`select count(*) as n from quotation_acceptances where version_id = ${versionId}`).toBe(1);
-    expect(await count`select count(*) as n from projects where id = ${a.projectId}`).toBe(1);
-    expect(await actorFromToken(a.sessionToken)).toBeNull();
-    await expect(login(a.email, "ClientPass123")).rejects.toThrow(/disabled/);
-    expect((await C.listClients(admin)).some((c) => c.id === a.clientId)).toBe(false);
-    expect((await C.listClients(admin, { archived: true })).some((c) => c.id === a.clientId)).toBe(true);
+    expect(im.protectedRecords).toEqual(["1 accepted quotation", "1 issued invoice", "1 confirmed or refunded payment"]);
+    expect((await C.deleteClient(admin, a.clientId, "Signed Bistro")).result).toBe("deleted");
 
-    await C.unarchiveClient(admin, a.clientId);
-    expect((await C.listClients(admin)).some((c) => c.id === a.clientId)).toBe(true);
-    // Portal access stays revoked until the admin restores it explicitly.
-    await expect(login(a.email, "ClientPass123")).rejects.toThrow(/disabled/);
+    expect(await count`select count(*) as n from client_profiles where id = ${a.clientId}`).toBe(0);
+    expect(await count`select count(*) as n from quotation_versions where id = ${versionId}`).toBe(0);
+    expect(await count`select count(*) as n from quotation_acceptances where version_id = ${versionId}`).toBe(0);
+    expect(await count`select count(*) as n from invoices where id = ${inv}`).toBe(0);
+    expect(await count`select count(*) as n from payments where id = ${pay}`).toBe(0);
+    expect(await count`select count(*) as n from users where id = ${a.client.userId}`).toBe(0);
+    expect(await actorFromToken(a.sessionToken)).toBeNull();
+    await expect(login(a.email, "ClientPass123")).rejects.toThrow(/Incorrect/);
+    const [log] = await rawSystem((tx) => tx`select data from audit_logs where action = 'client.deleted' and entity_id = ${a.clientId}`);
+    expect(log.data.business_name).toBe("Signed Bistro");
+    // The immutability protections are back on for everyone else afterwards.
+    expect(await count`select count(*) as n from projects where id = ${other.projectId}`).toBe(1);
+    const { versionId: ov } = await Q.createQuotation(admin, other.projectId, {});
+    await Q.sendQuotation(admin, ov);
+    await expect(rawSystem((tx) => tx`delete from quotation_versions where id = ${ov}`)).rejects.toThrow(/Only draft/);
   });
 
-  it("archives clients with an accepted proposal, an issued invoice, or a confirmed payment", async () => {
+  it("deletes everything even with an accepted proposal", async () => {
     const p = await makeClientWithProject(admin, "Prop");
     const prop = await sentProposal(p.clientId);
     const view = await P.getProposal(p.client, prop.proposalId);
     await P.acceptProposal(p.client, view.version.id, { signer_name: "Prop Owner", confirm_scope: true, confirm_amount: true, confirm_recurring: true, content_hash: view.hash });
-    expect((await C.deleteClient(admin, p.clientId, "Prop Bistro")).result).toBe("archived");
-
-    const i = await makeClientWithProject(admin, "Inv");
-    const inv = await B.createInvoice(admin, i.projectId, { title: "Advance", amount: 1000 });
-    await B.issueInvoice(admin, inv);
-    expect((await C.clientDeletionImpact(admin, i.clientId)).protectedRecords).toEqual(["1 issued invoice"]);
-    expect((await C.deleteClient(admin, i.clientId, "Inv Bistro")).result).toBe("archived");
-
-    const m = await makeClientWithProject(admin, "Pay");
-    await B.recordPayment(admin, m.projectId, { amount: 500, method: "cash", paid_on: "2026-10-01", status: "confirmed" });
-    expect((await C.clientDeletionImpact(admin, m.clientId)).protectedRecords).toEqual(["1 confirmed or refunded payment"]);
-    expect((await C.deleteClient(admin, m.clientId, "Pay Bistro")).result).toBe("archived");
+    await P.connectProject(admin, prop.proposalId, { projectId: p.projectId });
+    expect((await C.deleteClient(admin, p.clientId, "Prop Bistro")).result).toBe("deleted");
+    expect(await count`select count(*) as n from proposals where id = ${prop.proposalId}`).toBe(0);
+    expect(await count`select count(*) as n from proposal_acceptances where proposal_id = ${prop.proposalId}`).toBe(0);
+    expect(await count`select count(*) as n from users where id = ${p.client.userId}`).toBe(0);
   });
 });

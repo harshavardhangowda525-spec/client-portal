@@ -7,7 +7,7 @@ import { ActionButton } from "@/components/forms";
 import { ClientForm } from "../client-form";
 import { NewProjectForm } from "./new-project";
 import { InvitePanel } from "./invite";
-import { updateClientAction, revokeInvitationAction, setPortalAccessAction, unarchiveClientAction } from "@/app/actions/admin";
+import { updateClientAction, revokeInvitationAction, setPortalAccessAction } from "@/app/actions/admin";
 import { DangerZone } from "./danger";
 import { fmtDate, fmtDateTime, PROJECT_TYPES } from "@/lib/format";
 import { AppError } from "@/lib/errors";
@@ -23,7 +23,7 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
   try { data = await getClient(actor, clientId); } catch (e) { if (e instanceof AppError) notFound(); throw e; }
   const [admins, impact] = await Promise.all([listAdmins(actor), clientDeletionImpact(actor, clientId)]);
   const { client, projects, users, invitations } = data as unknown as {
-    client: { id: string; business_name: string; owner_name: string; email: string; phone: string | null; business_category: string | null; address: string | null; portal_access_revoked_at: Date | null; archived_at: Date | null; is_sample: boolean };
+    client: { id: string; business_name: string; owner_name: string; email: string; phone: string | null; business_category: string | null; address: string | null; portal_access_revoked_at: Date | null; is_sample: boolean };
     projects: { id: string; name: string; project_type: string; status: string; target_delivery_date: string | null }[];
     users: { id: string; name: string; email: string; disabled_at: Date | null; last_login_at: Date | null }[];
     invitations: { id: string; email: string; project_name: string | null; expires_at: Date; accepted_at: Date | null; revoked_at: Date | null; last_sent_at: Date | null; created_at: Date }[];
@@ -33,12 +33,6 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
     <>
       <PageHead eyebrow={<Link href="/admin/clients">Clients</Link>} title={<>{client.business_name} {client.is_sample && <Badge plain>Sample</Badge>}</>}
         sub={`${client.owner_name} · ${client.email}${client.phone ? ` · ${client.phone}` : ""}`} />
-      {client.archived_at && (
-        <div className="notice warn row-between" style={{ marginBottom: 16 }}>
-          <span>This client was archived on {fmtDate(client.archived_at)}. Their records are kept, but they are hidden from your lists and cannot sign in.</span>
-          <ActionButton action={unarchiveClientAction.bind(null, client.id)} className="btn btn-sm">Unarchive</ActionButton>
-        </div>
-      )}
       <div className="grid grid-main" style={{ alignItems: "start" }}>
         <div className="stack">
           <Panel title="Projects">
@@ -58,11 +52,9 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
             </details>
           </Panel>
           <Panel title="Client profile"><ClientForm action={updateClientAction.bind(null, client.id)} client={client} submitLabel="Save changes" /></Panel>
-          {!client.archived_at && (
-            <Panel title="Delete client" id="danger" sub="Remove this client and their data." className="danger-panel">
-              <DangerZone clientId={client.id} im={impact} />
-            </Panel>
-          )}
+          <Panel title="Delete client" id="danger" sub="Permanently remove this client and all of their data." className="danger-panel">
+            <DangerZone clientId={client.id} im={impact} />
+          </Panel>
         </div>
         <div className="stack">
           <Panel title="Portal access" sub={revoked ? "Access is revoked. The client cannot sign in." : "Invite the client with a private, single-use link."}>
