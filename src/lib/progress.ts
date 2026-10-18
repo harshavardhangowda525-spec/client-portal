@@ -1,3 +1,4 @@
+import { istToday } from "./dates";
 export type MilestoneLike = {
   status: "not_started" | "in_progress" | "awaiting_client" | "completed" | "blocked";
   weight: number;
@@ -12,8 +13,9 @@ export function computeProgress(milestones: MilestoneLike[]): number {
   return Math.round((done / total) * 100);
 }
 
+/** Today's business date in Indian Standard Time. */
 export function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return istToday();
 }
 
 export function isOverdue(m: { status: string; due_date?: string | null }, today = todayISO()): boolean {

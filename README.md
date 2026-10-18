@@ -91,7 +91,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 75 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 98 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
@@ -111,6 +111,37 @@ Deleting permanently removes the client and **all** of their data: projects, pro
 If the client has accepted quotations or proposals, issued invoices or confirmed payments, you get an extra warning. Download any PDFs you need for your accounts first.
 
 Only an audit-log entry remains, recording who deleted which client and when.
+
+## Maintenance & billing
+
+**Admin → Maintenance** tracks the free maintenance period for every project. Configure it in **Settings → Maintenance & payments**.
+
+- **When it starts.** By default, the period starts when the first proposal or quotation is created for the project. You can switch this to "proposal accepted" or "project delivered". It lasts 6 calendar months by default; month ends are clamped, so 31 Aug runs to 28/29 Feb. All dates are in India time (IST). You can override the dates per project.
+- **Statuses:** free maintenance, expiring soon (≤ 30 days), free period expired, awaiting client, paid maintenance, payment overdue, cancelled. Projects can also be marked exempt or paused.
+- **Notifications** go out by email and WhatsApp, to the client and to you:
+  - reminders 30 and 7 days before expiry
+  - an expiry notice
+  - monthly invoice reminders
+  - payment confirmations
+  - overdue reminders
+  - admin alerts, including when a client reports a payment
+
+  Each one is sent once, using a unique key per project and period, so re-running the check never duplicates anything. Every attempt is logged. Failures are retried a limited number of times. If a run is missed, reminders are still sent within a 2-day catch-up window, and the expiry notice is always sent, even late. You can edit all templates.
+- **Paid maintenance is opt-in only.** Nothing is charged just because six months have passed.
+  - The client sees the fee, tax, monthly total, what's included and excluded, and the payment and cancellation terms. They confirm with two checkboxes and a typed name, and that consent is stored permanently.
+  - Hosting and domain renewal appear as included only for projects where you tick "covers hosting & domain renewal".
+- **Billing.** Each month an ordinary invoice is issued a few days before the billing date: only one per billing period, and never for exempt, paused or cancelled projects.
+  - Clients pay by scanning the UPI QR code, or by bank transfer, using the details you enter in Settings. Then they tap "I've paid" with their UTR.
+  - The payment stays *pending* until you confirm it after checking your bank. Only then does the project show as paid.
+  - Clients can cancel from the portal. Unpaid invoices that aren't due yet are voided.
+- **The daily check** runs from Vercel Cron (`vercel.json`, 03:30 UTC = 09:00 IST). It calls `/api/cron/maintenance` with `CRON_SECRET`. You can also click **Run check now** on the Maintenance page or run `npm run maintenance:run`.
+
+**Testing without waiting six months:**
+- On a project's maintenance page, set the expiry date to today, or to 30 or 7 days from now, then click **Run check now**.
+- Or simulate a date: `npm run maintenance:run -- --date 2027-04-01`.
+
+  Real messages are sent if email or WhatsApp is configured, so test against a test client.
+- `npm test` covers all scenarios using a local fake SMTP server and a mocked WhatsApp API.
 
 ## Workflow
 
@@ -148,6 +179,8 @@ Before using the portal with a real client:
 **Optional integrations.** Each one shows its setup status in Settings. When a provider isn't configured, nothing is reported as delivered.
 - [ ] **Email (SMTP):** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. Any SMTP provider works (Google Workspace, Zoho, Brevo, Postmark, SES…). Set up SPF and DKIM for the sending domain.
 - [ ] **WhatsApp Cloud API:** `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`. You need a Meta Business account and an approved template with one body variable. Without it, use the manual **Open in WhatsApp** button.
+- [ ] **Maintenance check:** set `CRON_SECRET` (`openssl rand -hex 32`) in Vercel. `vercel.json` schedules the daily call. Check **Admin → Maintenance**: "Last check" should update daily.
+- [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Scan the QR preview with your phone to verify it, but don't pay.
 - [ ] **Razorpay:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Test with test-mode keys first. For the webhook, set `RAZORPAY_WEBHOOK_SECRET` and point a Razorpay webhook (events `payment.captured`, `order.paid`) at `https://<your-domain>/api/razorpay/webhook`.
 
-**Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`. All of them are read only on the server.
+**Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`. All of them are read only on the server.
