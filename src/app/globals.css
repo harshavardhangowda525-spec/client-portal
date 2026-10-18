@@ -131,6 +131,8 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 18px 0; }
 .grid { display: grid; gap: 16px; }
 .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.qr-box { background: #fff; border-radius: 12px; padding: 8px; width: 200px; height: 200px; display: block; }
 .grid-main { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .stack-sm { display: flex; flex-direction: column; gap: 6px; }
@@ -334,11 +336,11 @@ a.list-item:hover { background: var(--panel); }
 dialog.modal { border: 1px solid var(--border-strong); border-radius: 18px; padding: 0; color: var(--text); background: rgba(10, 18, 42, 0.92); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); width: min(560px, calc(100vw - 32px)); box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8); }
 dialog.modal::backdrop { background: rgba(2, 6, 18, 0.6); backdrop-filter: blur(4px); }
 dialog.modal[open] { animation: page-in 0.3s var(--ease); }
-.modal-body { padding: 22px 24px; }
+.modal-body { padding: 22px 24px; text-align: left; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 1024px) {
-  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-main { grid-template-columns: 1fr; }
 }
 @media (max-width: 860px) {

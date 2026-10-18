@@ -13,6 +13,7 @@
     "admin:create": "tsx scripts/create-admin.ts",
     "sample:seed": "tsx scripts/sample-data.ts seed",
     "sample:remove": "tsx scripts/sample-data.ts remove",
+    "maintenance:run": "tsx scripts/maintenance-run.ts",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -25,6 +26,7 @@
     "nodemailer": "^10.0.13",
     "pdf-lib": "^1.17.1",
     "postgres": "^3.4.9",
+    "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "server-only": "^0.0.1",
@@ -34,9 +36,12 @@
     "@playwright/test": "1.56",
     "@types/node": "^26.6.4",
     "@types/nodemailer": "^8.0.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/smtp-server": "^3.5.13",
     "dotenv": "^18.0.5",
+    "smtp-server": "^3.19.23",
     "tsx": "^4.23.15",
     "typescript": "5.9",
     "vitest": "^5.0.3"

@@ -5,13 +5,15 @@ import { Icon } from "@/components/icons";
 import { fmtDate, PAYMENT_METHODS } from "@/lib/format";
 import { integrations } from "@/lib/config";
 import { PayOnline } from "./pay-online";
+import { PayBox } from "@/components/views/pay-box";
+import { getPaymentDetails } from "@/server/maintenance";
 
 export const metadata = { title: "Invoices & payments" };
 
 export default async function PaymentsPage({ params }: { params: Promise<{ projectId: string }> }) {
   const actor = await requireClient();
   const { projectId } = await params;
-  const b = await getBilling(actor, projectId);
+  const [b, pd] = await Promise.all([getBilling(actor, projectId), getPaymentDetails()]);
   const online = integrations().razorpay;
   const cur = b.quotation?.currency ?? "INR";
   return (
@@ -26,7 +28,7 @@ export default async function PaymentsPage({ params }: { params: Promise<{ proje
           <span className="tiny faint">{b.advanceRequired != null ? <>{b.advanceLabel}: <Money value={b.advanceRequired} currency={cur} /></> : "—"}</span></Panel>
       </div>
 
-      {b.overdueInvoices.length > 0 && <div className="notice warn section">{b.overdueInvoices.length} invoice(s) are past their due date. If you have already paid, please share the payment reference in Messages.</div>}
+      {b.overdueInvoices.length > 0 && <div className="notice warn section">{b.overdueInvoices.length} invoice(s) are past their due date. If you have already paid, tap “Pay” on the invoice and report the payment reference.</div>}
 
       {b.terms.length > 0 && (
         <Panel title="Payment schedule" className="section">
@@ -56,6 +58,9 @@ export default async function PaymentsPage({ params }: { params: Promise<{ proje
                 <td data-label="Balance" className="num"><Money value={i.balance} currency={i.currency} /></td>
                 <td data-label="Status"><InvoiceBadge status={i.status} overdue={i.overdue} /></td>
                 <td data-label="" className="right"><div className="row" style={{ justifyContent: "flex-end" }}>
+                  {i.balance > 0 && ["issued", "partially_paid"].includes(i.status) && (
+                    <PayBox invoice={{ id: i.id, number: i.number, balance: i.balance }} pd={pd} reported={b.payments.some((p) => p.invoice_id === i.id && p.status === "pending")} />
+                  )}
                   {online && i.balance > 0 && ["issued", "partially_paid"].includes(i.status) && <PayOnline invoiceId={i.id} />}
                   <a className="btn btn-sm" href={`/api/invoices/${i.id}/pdf`} target="_blank" rel="noopener"><Icon name="download" /> PDF</a>
                 </div></td>
@@ -66,10 +71,10 @@ export default async function PaymentsPage({ params }: { params: Promise<{ proje
       </Panel>
 
       <Panel title="Payment history" className="section">
-        {b.payments.length === 0 ? <Empty icon="wallet" title="No confirmed payments yet">When a payment is received and confirmed, it will be listed here with a receipt.</Empty> : (
+        {b.payments.filter((p) => p.status !== "pending").length === 0 ? <Empty icon="wallet" title="No confirmed payments yet">When a payment is received and confirmed, it will be listed here with a receipt.</Empty> : (
           <div className="table-wrap"><table className="table table-cards">
             <thead><tr><th>Date</th><th>Receipt</th><th>Method</th><th>Reference</th><th className="num">Amount</th><th></th></tr></thead>
-            <tbody>{b.payments.map((p) => (
+            <tbody>{b.payments.filter((p) => p.status !== "pending").map((p) => (
               <tr key={p.id}>
                 <td data-label="Date">{fmtDate(p.paid_on)}</td><td data-label="Receipt">{p.receipt_number ?? "—"}{p.status === "refunded" && <span className="badge red" style={{ marginLeft: 6 }}>Refunded</span>}</td>
                 <td data-label="Method">{PAYMENT_METHODS[p.method]}</td><td data-label="Reference" className="small muted">{p.reference ?? "—"}</td>

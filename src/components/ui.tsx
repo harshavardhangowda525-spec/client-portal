@@ -124,3 +124,17 @@ export function Tabs({ items, current }: { items: { href: string; label: ReactNo
 export function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((s) => s[0]!.toUpperCase()).join("");
 }
+
+export const MAINTENANCE_STATUS: Record<string, string> = {
+  FREE_MAINTENANCE_ACTIVE: "Free maintenance", EXPIRING_SOON: "Expiring soon", FREE_MAINTENANCE_EXPIRED: "Free period expired",
+  AWAITING_CLIENT_CONFIRMATION: "Awaiting client", PAID_MAINTENANCE_ACTIVE: "Paid maintenance", PAYMENT_OVERDUE: "Payment overdue",
+  MAINTENANCE_CANCELLED: "Cancelled",
+};
+const maintenanceTone: Record<string, Tone> = {
+  FREE_MAINTENANCE_ACTIVE: "blue", EXPIRING_SOON: "amber", FREE_MAINTENANCE_EXPIRED: "red", AWAITING_CLIENT_CONFIRMATION: "violet",
+  PAID_MAINTENANCE_ACTIVE: "green", PAYMENT_OVERDUE: "red", MAINTENANCE_CANCELLED: "",
+};
+export const MaintenanceBadge = ({ status }: { status: string | null }) =>
+  status ? <Badge tone={maintenanceTone[status]}>{MAINTENANCE_STATUS[status] ?? status}</Badge> : <Badge plain>Not started</Badge>;
+export const DeliveryBadge = ({ status }: { status: string | null }) =>
+  status ? <Badge tone={status === "sent" ? "green" : status === "failed" ? "red" : "amber"}>{status.replace("_", " ")}</Badge> : <span className="faint small">—</span>;

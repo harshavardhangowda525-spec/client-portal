@@ -7,6 +7,7 @@ import { acceptedProposalForProject } from "./proposals";
 import { AppError, notFound } from "@/lib/errors";
 import { fromPaise, toPaise } from "@/lib/money";
 import { todayISO } from "@/lib/progress";
+import { onPaymentStatusChanged } from "./maintenance";
 
 export type Invoice = {
   id: string; project_id: string; number: string; title: string; description: string | null; payment_term_label: string | null;
@@ -55,7 +56,7 @@ export async function getBilling(actor: Actor, projectId: string) {
     const today = todayISO();
     const invoiceRows = await tx<Omit<Invoice, "paid" | "balance" | "overdue">[]>`
       select * from invoices where project_id = ${projectId} order by created_at`;
-    // Clients only ever see confirmed payments (enforced by RLS).
+    // Clients see confirmed payments plus pending ones they reported themselves (enforced by RLS).
     const payments = await tx<Payment[]>`
       select p.*, i.number as invoice_number from payments p left join invoices i on i.id = p.invoice_id
       where p.project_id = ${projectId} order by coalesce(p.paid_on, p.created_at::date) desc, p.created_at desc`;
@@ -170,7 +171,7 @@ export async function recordPayment(actor: Actor, projectId: string, input: unkn
   assertAdmin(actor);
   const d = parse(paymentSchema, input);
   if (d.paid_on > todayISO()) throw new AppError("Payment date cannot be in the future.");
-  return withDb(actor, async (tx) => {
+  const id = await withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
     if (d.invoice_id) {
       const [inv] = await tx<{ status: string }[]>`select status from invoices where id = ${d.invoice_id} and project_id = ${projectId}`;
@@ -187,6 +188,8 @@ export async function recordPayment(actor: Actor, projectId: string, input: unkn
     if (d.status === "confirmed") await paymentConfirmedNotice(tx, actor, projectId, d.amount);
     return p.id;
   });
+  await onPaymentStatusChanged(id);
+  return id;
 }
 
 async function paymentConfirmedNotice(tx: Tx, actor: Actor | null, projectId: string, amount: number) {
@@ -197,7 +200,7 @@ async function paymentConfirmedNotice(tx: Tx, actor: Actor | null, projectId: st
 
 export async function setPaymentStatus(actor: Actor, paymentId: string, status: "confirmed" | "failed" | "refunded") {
   assertAdmin(actor);
-  return withDb(actor, async (tx) => {
+  await withDb(actor, async (tx) => {
     const [p] = await tx<{ id: string; project_id: string; invoice_id: string | null; status: string; amount: number; source: string; verified_at: Date | null }[]>`
       select * from payments where id = ${paymentId}`;
     if (!p) throw notFound("Payment not found.");
@@ -214,6 +217,7 @@ export async function setPaymentStatus(actor: Actor, paymentId: string, status: 
     await audit(tx, actor, `payment.${status}`, "payment", paymentId, p.project_id, { amount: p.amount, from: p.status });
     if (status === "confirmed") await paymentConfirmedNotice(tx, actor, p.project_id, Number(p.amount));
   });
+  await onPaymentStatusChanged(paymentId);
 }
 
 export async function getInvoice(actor: Actor, invoiceId: string) {
