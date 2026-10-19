@@ -6,8 +6,11 @@ export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const actor = await getActor();
-  if (actor) redirect(actor.role === "admin" ? "/admin" : "/portal");
   const { next } = await searchParams;
+  if (actor) {
+    const home = actor.role === "admin" ? "/admin" : "/portal";
+    redirect(next && next.startsWith(home) && !next.startsWith("//") ? next : home);
+  }
   return (
     <div className="auth">
       <div className="glass auth-card">

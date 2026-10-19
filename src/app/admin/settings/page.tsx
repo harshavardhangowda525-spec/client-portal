@@ -4,6 +4,7 @@ import { Badge, PageHead, Panel } from "@/components/ui";
 import { PasswordForm } from "@/components/views/password-form";
 import { integrations, appUrl, company } from "@/lib/config";
 import { fmtDateTime } from "@/lib/format";
+import { appUrlWarning } from "@/server/app-builds";
 
 export const metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
@@ -16,10 +17,16 @@ export default async function SettingsPage() {
   const actor = await requireAdmin();
   const [sec, log] = await Promise.all([databaseSecurityStatus(actor), deliveryLog(actor)]);
   const i = integrations();
+  const urlWarning = appUrlWarning();
   return (
     <>
       <PageHead title="Settings" sub="Integrations, security status and your account."
         actions={<a href="/admin/settings/pricing" className="btn">Pricing configuration →</a>} />
+      <div style={{ marginBottom: 16 }}><Panel title="Client portal link"
+        sub="Links in invitations and emails use this address (APP_URL). Clients sign in once and go straight to the page in the link.">
+        <div className="row"><code className="small">{appUrl()}/login</code>{urlWarning ? <Badge tone="red">Check APP_URL</Badge> : <Badge tone="green">OK</Badge>}</div>
+        {urlWarning && <div className="notice warn" style={{ marginTop: 10 }}>{urlWarning}</div>}
+      </Panel></div>
       <div className="grid grid-2" style={{ alignItems: "start" }}>
         <Panel title="Integrations" sub="Configured with environment variables on the server. Nothing is reported as delivered unless the provider accepted it.">
           <div className="list">

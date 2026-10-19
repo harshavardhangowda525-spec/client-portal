@@ -73,7 +73,7 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
-For later migrations, such as `003_client_archive.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` and `005_app_builds.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
 
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
@@ -91,7 +91,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 98 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 106 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
@@ -111,6 +111,40 @@ Deleting permanently removes the client and **all** of their data: projects, pro
 If the client has accepted quotations or proposals, issued invoices or confirmed payments, you get an extra warning. Download any PDFs you need for your accounts first.
 
 Only an audit-log entry remains, recording who deleted which client and when.
+
+## App builds (mobile app review)
+
+**Project → App builds** lets you publish each test build of a client's mobile app. Each build gets a version number and a status:
+- *ready for review*
+- *changes requested*
+- *approved*
+- *superseded*: set automatically when you publish a newer build
+
+**When publishing**, add at least one way to test:
+- an **APK file**, stored privately in the database
+- an **Android link**: Play internal testing, Firebase App Distribution or a Google Drive APK
+- a **TestFlight link**
+- an **Expo or web demo link**
+
+You can also add up to 8 screenshots and release notes. The client gets a portal notification and an email (if SMTP is set) linking straight to **App review**.
+
+**On Vercel, uploads larger than about 4.5 MB are rejected** (a platform limit). For larger APKs, use the Android link instead.
+
+**The client's App review page** shows:
+- large install buttons and simple install instructions
+- screenshots in a phone frame
+- **Request changes**: the client adds a note, the phone they tested on and optional screenshots
+- **Approve this build**: requires a confirmation checkbox; the approval is recorded in the audit log with who, when and which version
+- version history and a comment thread
+
+Approved builds can't be deleted. Deleting a client removes all their builds.
+
+## Client links
+
+Every link the portal sends (invitations, emails, notifications) is built from `APP_URL`.
+- If a client isn't signed in, they're taken to sign-in and then straight back to the page in the link.
+- Set `APP_URL` to your **production** address, for example `https://your-project.vercel.app` or your own domain. Vercel *preview* and deployment links (`…-git-…vercel.app`, `…-abc123xyz-…vercel.app`) show clients a Vercel login.
+- **Admin → Settings → Client portal link** warns you if `APP_URL` looks like one of those. If clients still see a Vercel login, go to Vercel → **Settings → Deployment Protection** and disable *Vercel Authentication*, or set it to cover previews only.
 
 ## Maintenance & billing
 

@@ -145,7 +145,7 @@ export async function deleteUpdate(actor: Actor, updateId: string) {
 export type CommentRow = { id: string; target_type: string; target_id: string | null; body: string; created_at: Date;
   author_id: string | null; author_name: string | null; author_role: string | null };
 
-async function listComments(tx: Tx, projectId: string, targetType?: string) {
+export async function listComments(tx: Tx, projectId: string, targetType?: string) {
   return tx<CommentRow[]>`
     select c.id, c.target_type, c.target_id, c.body, c.created_at, c.author_id, u.name as author_name, u.role as author_role
     from comments c left join users u on u.id = c.author_id
@@ -171,7 +171,7 @@ export async function listUpdates(actor: Actor, projectId: string) {
 }
 
 const commentSchema = z.object({
-  target_type: z.enum(["thread", "update", "preview", "milestone", "quotation"]),
+  target_type: z.enum(["thread", "update", "preview", "milestone", "quotation", "app_build"]),
   target_id: optUuid,
   body: text(10000),
 });
@@ -182,7 +182,7 @@ export async function addComment(actor: Actor, projectId: string, input: unknown
   return withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
     if (d.target_type !== "thread") {
-      const table = { update: tx`project_updates`, preview: tx`previews`, milestone: tx`milestones`, quotation: tx`quotations` }[d.target_type];
+      const table = { update: tx`project_updates`, preview: tx`previews`, milestone: tx`milestones`, quotation: tx`quotations`, app_build: tx`app_builds` }[d.target_type];
       // Under RLS a client cannot see (and therefore cannot comment on) internal targets.
       const [ok] = await tx`select 1 from ${table} where id = ${d.target_id} and project_id = ${projectId}`;
       if (!ok) throw notFound("The item you are commenting on was not found.");
@@ -196,9 +196,10 @@ export async function addComment(actor: Actor, projectId: string, input: unknown
     }
     if (actor.role === "client") {
       await notifyAdmins(tx, actor, { type: "client_message", projectId, title: `New message from ${actor.name}`, body: snippet,
-        link: `/admin/projects/${projectId}/messages` });
+        link: d.target_type === "app_build" ? `/admin/projects/${projectId}/app-builds` : `/admin/projects/${projectId}/messages` });
     } else {
-      const link = d.target_type === "thread" ? `/portal/${projectId}/messages` : d.target_type === "preview" ? `/portal/${projectId}/preview` : `/portal/${projectId}/updates`;
+      const link = d.target_type === "thread" ? `/portal/${projectId}/messages` : d.target_type === "preview" ? `/portal/${projectId}/preview`
+        : d.target_type === "app_build" ? `/portal/${projectId}/app` : `/portal/${projectId}/updates`;
       await notifyProjectClients(tx, actor, projectId, { type: "message", title: `New message from ${actor.name}`, body: snippet, link });
     }
     return c.id;

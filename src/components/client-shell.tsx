@@ -28,6 +28,7 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
         { href: `${base}/timeline`, label: "Timeline", icon: "timeline" },
         { href: `${base}/quotation`, label: "Quotation", icon: "file" },
         { href: `${base}/preview`, label: "Website preview", icon: "eye" },
+        { href: `${base}/app`, label: "App review", icon: "phone" },
         { href: `${base}/payments`, label: "Invoices & payments", icon: "wallet" },
         { href: `${base}/maintenance`, label: "Maintenance & billing", icon: "wrench" },
         { href: `${base}/updates`, label: "Updates", icon: "activity" },
