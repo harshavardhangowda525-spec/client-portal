@@ -3,6 +3,7 @@
 import * as X from "@/server/content";
 import * as M from "@/server/milestones";
 import * as Q from "@/server/quotations";
+import * as AB from "@/server/app-builds";
 import { run, form, type ActionState } from "./run";
 import { requestMeta } from "@/lib/session";
 import { AppError } from "@/lib/errors";
@@ -60,4 +61,15 @@ export async function requestChangesAction(versionId: string, _: ActionState, fd
 
 export async function rejectQuotationAction(versionId: string, _: ActionState, fd: FormData) {
   return run("client", async (a) => { await Q.rejectQuotation(a, versionId, form(fd)); return "Quotation declined. The team has been notified."; });
+}
+
+export async function reviewAppBuildAction(buildId: string, _: ActionState, fd: FormData) {
+  return run("client", async (a) => {
+    const screenshots: { name: string; type: string; data: Buffer }[] = [];
+    for (const v of fd.getAll("screenshots")) {
+      if (v instanceof File && v.size > 0) screenshots.push({ name: v.name, type: v.type, data: Buffer.from(await v.arrayBuffer()) });
+    }
+    await AB.reviewAppBuild(a, buildId, { ...form(fd), confirm: fd.get("confirm") === "on" }, screenshots);
+    return fd.get("decision") === "approved" ? "App build approved. Thank you!" : "Your feedback was sent to the team.";
+  });
 }

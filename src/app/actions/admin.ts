@@ -6,6 +6,7 @@ import * as M from "@/server/milestones";
 import * as Q from "@/server/quotations";
 import * as X from "@/server/content";
 import * as B from "@/server/billing";
+import * as AB from "@/server/app-builds";
 import { run, form, checkbox, type ActionState } from "./run";
 import { AppError } from "@/lib/errors";
 
@@ -196,4 +197,19 @@ export async function deleteClientAction(clientId: string, _: ActionState, fd: F
   const r = await run("admin", async (a) => { await C.deleteClient(a, clientId, String(fd.get("confirm_name") ?? "")); });
   if (r?.ok) redirect("/admin/clients?deleted=1");
   return r;
+}
+
+// ---- app builds ----
+const fileOf = async (v: FormDataEntryValue | null) =>
+  v instanceof File && v.size > 0 ? { name: v.name, type: v.type, data: Buffer.from(await v.arrayBuffer()) } : null;
+
+export async function publishAppBuildAction(projectId: string, _: ActionState, fd: FormData) {
+  return run("admin", async (a) => {
+    const screenshots = (await Promise.all(fd.getAll("screenshots").map(fileOf))).filter((f) => f !== null);
+    await AB.publishAppBuild(a, projectId, form(fd), { apk: await fileOf(fd.get("apk")), screenshots });
+    return "App build published and the client was notified.";
+  });
+}
+export async function deleteAppBuildAction(buildId: string) {
+  return run("admin", async (a) => { await AB.deleteAppBuild(a, buildId); return "App build deleted."; });
 }

@@ -11,16 +11,22 @@ export const getActor = cache(async (): Promise<Actor | null> => {
   return actorFromToken(token);
 });
 
+/** Sign-in page that returns to the current page afterwards (path supplied by middleware). */
+async function loginUrl() {
+  const path = (await headers()).get("x-pathname");
+  return path && path.startsWith("/") && !path.startsWith("//") ? `/login?next=${encodeURIComponent(path)}` : "/login";
+}
+
 export async function requireAdmin(): Promise<Actor> {
   const a = await getActor();
-  if (!a) redirect("/login");
+  if (!a) redirect(await loginUrl());
   if (a.role !== "admin") redirect("/portal");
   return a;
 }
 
 export async function requireClient(): Promise<Actor> {
   const a = await getActor();
-  if (!a) redirect("/login");
+  if (!a) redirect(await loginUrl());
   if (a.role !== "client") redirect("/admin");
   return a;
 }

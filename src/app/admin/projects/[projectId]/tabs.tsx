@@ -7,7 +7,7 @@ export function ProjectTabs({ projectId, unread }: { projectId: string; unread: 
   const path = usePathname();
   const base = `/admin/projects/${projectId}`;
   const tabs = [
-    ["", "Overview"], ["/milestones", "Milestones"], ["/quotations", "Quotations"], ["/previews", "Previews"], ["/updates", "Updates"],
+    ["", "Overview"], ["/milestones", "Milestones"], ["/quotations", "Quotations"], ["/previews", "Previews"], ["/app-builds", "App builds"], ["/updates", "Updates"],
     ["/billing", "Invoices & payments"], ["/documents", "Documents"], ["/messages", `Messages${unread ? ` (${unread})` : ""}`], ["/activity", "Activity"],
   ];
   return (
