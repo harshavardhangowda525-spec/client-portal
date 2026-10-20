@@ -51,11 +51,21 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
     groups.push({ label: "Your projects", items: projects.map((p) => ({ href: `/portal/${p.id}`, label: p.name, icon: "briefcase" as const, exact: true })) });
   }
   const business = projects[0]?.business_name ?? "";
+  const viewing = actor.viewAs;
   return (
     <Shell
       groups={groups}
       user={{ name: actor.name, sub: business || actor.email, initials: initials(actor.name) }}
-      logout={<form action={logoutAction}><button className="btn btn-ghost btn-sm btn-block" style={{ justifyContent: "flex-start" }}><Icon name="logout" /> Sign out</button></form>}
+      logout={viewing
+        ? <a href="/portal/view-as/exit" className="btn btn-ghost btn-sm btn-block" style={{ justifyContent: "flex-start" }}><Icon name="logout" /> Exit client view</a>
+        : <form action={logoutAction}><button className="btn btn-ghost btn-sm btn-block" style={{ justifyContent: "flex-start" }}><Icon name="logout" /> Sign out</button></form>}
+      banner={viewing ? (
+        <div className="view-as-banner" role="status">
+          <Icon name="eye" />
+          <span>Viewing as <strong>{actor.name}</strong>{business ? ` (${business})` : ""}: read-only. Nothing you open here is saved or shown to the client.</span>
+          <a href="/portal/view-as/exit" className="btn btn-sm">Exit client view</a>
+        </div>
+      ) : undefined}
       topRight={pid ? (
         <Link href={`/portal/${pid}/notifications`} className="btn btn-ghost icon-btn" aria-label={`Notifications${unreadNotes ? `, ${unreadNotes} unread` : ""}`} style={{ position: "relative" }}>
           <Icon name="bell" />

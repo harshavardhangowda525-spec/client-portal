@@ -7,7 +7,8 @@ import { ActionButton } from "@/components/forms";
 import { ClientForm } from "../client-form";
 import { NewProjectForm } from "./new-project";
 import { InvitePanel } from "./invite";
-import { updateClientAction, revokeInvitationAction, setPortalAccessAction } from "@/app/actions/admin";
+import { updateClientAction, revokeInvitationAction, setPortalAccessAction, viewAsClientAction } from "@/app/actions/admin";
+import { Icon } from "@/components/icons";
 import { DangerZone } from "./danger";
 import { fmtDate, fmtDateTime, PROJECT_TYPES } from "@/lib/format";
 import { AppError } from "@/lib/errors";
@@ -32,7 +33,8 @@ export default async function ClientPage({ params }: { params: Promise<{ clientI
   return (
     <>
       <PageHead eyebrow={<Link href="/admin/clients">Clients</Link>} title={<>{client.business_name} {client.is_sample && <Badge plain>Sample</Badge>}</>}
-        sub={`${client.owner_name} · ${client.email}${client.phone ? ` · ${client.phone}` : ""}`} />
+        sub={`${client.owner_name} · ${client.email}${client.phone ? ` · ${client.phone}` : ""}`}
+        actions={<ActionButton action={viewAsClientAction.bind(null, client.id, null)} className="btn"><Icon name="eye" /> View as client</ActionButton>} />
       <div className="grid grid-main" style={{ alignItems: "start" }}>
         <div className="stack">
           <Panel title="Projects">

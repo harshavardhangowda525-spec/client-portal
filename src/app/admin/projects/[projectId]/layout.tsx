@@ -5,6 +5,9 @@ import { projectOverview } from "@/server/dashboards";
 import { unreadMessageCount } from "@/server/content";
 import { Badge, ProjectBadge } from "@/components/ui";
 import { ProjectTabs } from "./tabs";
+import { ActionButton } from "@/components/forms";
+import { Icon } from "@/components/icons";
+import { viewAsClientAction } from "@/app/actions/admin";
 import { AppError } from "@/lib/errors";
 import { PROJECT_TYPES } from "@/lib/format";
 
@@ -22,6 +25,7 @@ export default async function AdminProjectLayout({ children, params }: { childre
           <h1>{o.project.name} {o.project.is_sample && <Badge plain>Sample</Badge>}</h1>
           <div className="row" style={{ marginTop: 6 }}><ProjectBadge status={o.project.status} /><span className="small muted">{o.progress}% complete · {o.project.current_stage ?? "—"}</span></div>
         </div>
+        <ActionButton action={viewAsClientAction.bind(null, o.project.client_id, projectId)} className="btn"><Icon name="eye" /> View as client</ActionButton>
       </div>
       <ProjectTabs projectId={projectId} unread={unread} />
       {children}

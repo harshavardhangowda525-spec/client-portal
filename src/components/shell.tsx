@@ -9,8 +9,8 @@ import { Toaster } from "./forms";
 export type NavItem = { href: string; label: string; icon: IconName; count?: number; exact?: boolean };
 export type NavGroup = { label?: string; items: NavItem[] };
 
-export function Shell({ groups, user, children, topRight, logout }: {
-  groups: NavGroup[]; user: { name: string; sub: string; initials: string }; children: ReactNode; topRight?: ReactNode; logout: ReactNode;
+export function Shell({ groups, user, children, topRight, logout, banner }: {
+  groups: NavGroup[]; user: { name: string; sub: string; initials: string }; children: ReactNode; topRight?: ReactNode; logout: ReactNode; banner?: ReactNode;
 }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
@@ -47,6 +47,7 @@ export function Shell({ groups, user, children, topRight, logout }: {
       </aside>
       {open && <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,.5)" }} aria-hidden="true" />}
       <div className="main">
+        {banner}
         <header className="topbar">
           <button className="btn btn-ghost icon-btn menu-toggle" onClick={() => setOpen((v) => !v)} aria-label="Open menu" aria-expanded={open}>
             <Icon name="menu" />

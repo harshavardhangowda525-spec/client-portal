@@ -9,6 +9,8 @@ export type Actor = {
   clientId: string | null;
   name: string;
   email: string;
+  /** Set when an admin is viewing the portal as this client. Everything is read-only and rolled back. */
+  viewAs?: { adminId: string; adminName: string; expiresAt: number };
 };
 
 /** Trusted server-only context (authentication, invitations, notification fan-out, scripts). */
@@ -53,8 +55,26 @@ function isSystem(ctx: Ctx): ctx is typeof SYSTEM {
  * Run `fn` in a transaction whose Postgres session variables identify the actor,
  * so Row Level Security policies apply to every statement.
  */
+class Rollback<T> { constructor(readonly value: T) {} }
+
 export async function withDb<T>(ctx: Ctx, fn: (tx: Tx) => Promise<T>): Promise<T> {
   const sql = getSql();
+  if (!isSystem(ctx) && ctx.viewAs) {
+    // "View as client": run with the client's permissions, then roll back so nothing the page does
+    // (view tracking, read markers…) is ever saved.
+    try {
+      await sql.begin(async (tx) => {
+        await tx`select set_config('app.role', ${ctx.role}, true),
+                        set_config('app.user_id', ${ctx.userId}, true),
+                        set_config('app.client_id', ${ctx.clientId ?? ""}, true)`;
+        throw new Rollback(await fn(tx as unknown as Tx));
+      });
+    } catch (e) {
+      if (e instanceof Rollback) return e.value as T;
+      throw e;
+    }
+    throw new Error("unreachable");
+  }
   return sql.begin(async (tx) => {
     if (isSystem(ctx)) {
       await tx`select set_config('app.role', 'system', true)`;

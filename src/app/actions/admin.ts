@@ -1,6 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE, VIEW_AS_COOKIE, VIEW_AS_MINUTES, viewAsValue } from "@/lib/session";
 import * as C from "@/server/clients";
 import * as M from "@/server/milestones";
 import * as Q from "@/server/quotations";
@@ -212,4 +214,21 @@ export async function publishAppBuildAction(projectId: string, _: ActionState, f
 }
 export async function deleteAppBuildAction(buildId: string) {
   return run("admin", async (a) => { await AB.deleteAppBuild(a, buildId); return "App build deleted."; });
+}
+
+// ---- view as client (read-only) ----
+export async function viewAsClientAction(clientId: string, projectId?: string | null): Promise<ActionState> {
+  let dest = "/portal";
+  const r = await run("admin", async (a) => {
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    if (!token) throw new AppError("Your session has expired. Please sign in again.");
+    const target = await C.viewAsTarget(a, clientId, projectId);
+    const expiresAt = Date.now() + VIEW_AS_MINUTES * 60_000;
+    (await cookies()).set(VIEW_AS_COOKIE, viewAsValue(token, target.userId, expiresAt), {
+      httpOnly: true, sameSite: "lax", secure: process.env.COOKIE_SECURE === "true", path: "/portal", expires: new Date(expiresAt),
+    });
+    dest = target.projectId ? `/portal/${target.projectId}` : "/portal";
+  });
+  if (r?.ok) redirect(dest);
+  return r;
 }
