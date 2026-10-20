@@ -14,7 +14,7 @@ export default async function PaymentsPage({ params }: { params: Promise<{ proje
   const actor = await requireClient();
   const { projectId } = await params;
   const [b, pd] = await Promise.all([getBilling(actor, projectId), getPaymentDetails()]);
-  const online = integrations().razorpay;
+  const online = integrations().razorpay && !actor.viewAs;
   const cur = b.quotation?.currency ?? "INR";
   return (
     <>

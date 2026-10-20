@@ -13,6 +13,7 @@ export async function run(role: "admin" | "client" | "any", fn: (actor: Actor) =
   try {
     const actor = await getActor();
     if (!actor) return { ok: false, error: "Your session has expired. Please sign in again." };
+    if (actor.viewAs) return { ok: false, error: "You're viewing the portal as the client (read-only). Exit client view to make changes.", at: Date.now() };
     if (role !== "any" && actor.role !== role) return { ok: false, error: "You do not have permission to do that." };
     const r = await fn(actor);
     // Fresh data is fetched by the calling form via router.refresh(), which preserves client state.

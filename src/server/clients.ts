@@ -431,3 +431,20 @@ export async function deleteClient(actor: Actor, clientId: string, confirmName: 
     return { result: "deleted" as const };
   });
 }
+
+/** The portal user an admin will see the portal as, plus a project to land on. Logged in the audit trail. */
+export async function viewAsTarget(actor: Actor, clientId: string, preferProjectId?: string | null) {
+  assertAdmin(actor);
+  return withDb(actor, async (tx) => {
+    const [c] = await tx<{ id: string; business_name: string }[]>`select id, business_name from client_profiles where id = ${clientId}`;
+    if (!c) throw notFound("Client not found.");
+    const [u] = await tx<{ id: string; name: string }[]>`
+      select id, name from users where client_id = ${clientId} and role = 'client' and disabled_at is null order by created_at limit 1`;
+    if (!u) throw new AppError("This client hasn't created their portal account yet. Send them an invitation first; once they accept it you can view the portal as them.");
+    const [p] = await tx<{ id: string }[]>`
+      select p.id from projects p join project_members m on m.project_id = p.id and m.user_id = ${u.id}
+      order by (p.id::text = ${preferProjectId ?? ""}) desc, p.created_at desc limit 1`;
+    await audit(tx, actor, "client.viewed_as", "client", clientId, p?.id ?? null, { user: u.name, business: c.business_name });
+    return { userId: u.id, projectId: p?.id ?? null };
+  });
+}

@@ -1,6 +1,6 @@
 const LABELS: Record<string, string> = {
   "client.created": "Client created", "client.updated": "Client details updated", "client.access_revoked": "Portal access revoked",
-  "client.access_restored": "Portal access restored", "project.created": "Project created", "project.updated": "Project updated",
+  "client.access_restored": "Portal access restored", "client.viewed_as": "Admin viewed the portal as the client", "project.created": "Project created", "project.updated": "Project updated",
   "project.status_changed": "Project status changed", "project.commenced": "Project commenced", "invitation.created": "Portal invitation created",
   "invitation.accepted": "Client joined the portal", "invitation.revoked": "Invitation revoked", "milestone.created": "Milestone added",
   "milestone.updated": "Milestone updated", "milestone.deleted": "Milestone deleted", "milestone.reordered": "Milestones reordered",

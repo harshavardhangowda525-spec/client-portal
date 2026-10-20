@@ -92,7 +92,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 108 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 111 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
@@ -139,6 +139,18 @@ You can also add up to 8 screenshots and release notes. The client gets a portal
 - version history and a comment thread
 
 Approved builds can't be deleted. Deleting a client removes all their builds.
+
+## View as client
+
+**View as client** is on every client page and project page. It opens the real portal exactly as that client sees it, with a banner across the top and an **Exit client view** button.
+- **Read-only, no trace.**
+  - Every database transaction in this mode runs with the client's own permissions and is then rolled back. Even things a page normally records, like "quotation viewed" or "messages read", are never saved.
+  - Every action (sending a message, approving, paying, changing settings) is refused.
+- **Session.**
+  - The view lasts 60 minutes. It is tied to your admin session through an HMAC-signed, `httpOnly` cookie that only applies to `/portal` pages, so admin pages in other tabs keep working as you.
+  - Signing out of your admin account ends it.
+- **Audit.** Each view is recorded in the audit log ("Admin viewed the portal as the client").
+- **Requirement.** The client needs a portal account (an accepted invitation).
 
 ## Client links
 

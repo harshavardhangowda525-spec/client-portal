@@ -84,6 +84,17 @@ export async function actorFromToken(token: string | undefined | null): Promise<
   });
 }
 
+/** A client user's identity, for an admin's read-only "view as client" (no session is created). */
+export async function clientActor(userId: string): Promise<Actor | null> {
+  return withDb(SYSTEM, async (tx) => {
+    const [u] = await tx<Actor[]>`
+      select u.id as "userId", u.role, u.client_id as "clientId", u.name, u.email from users u
+      join client_profiles cp on cp.id = u.client_id
+      where u.id = ${userId} and u.role = 'client' and u.disabled_at is null`;
+    return u ? { userId: u.userId, role: u.role, clientId: u.clientId, name: u.name, email: u.email } : null;
+  });
+}
+
 export async function logout(token: string | undefined | null) {
   if (!token) return;
   await withDb(SYSTEM, (tx) => tx`delete from sessions where token_hash = ${sha256(token)}`);
