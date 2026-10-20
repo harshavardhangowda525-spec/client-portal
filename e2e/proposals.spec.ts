@@ -49,6 +49,9 @@ test("proposal builder: create, price, send, accept, convert", async ({ browser 
   await admin.getByLabel("Qty").first().fill("2");
   await admin.getByLabel("Quoted price (₹)").first().fill("1000");
   await expect(admin.locator(".grand").getByText("₹6,999.00")).toBeVisible();
+  // AI services are offered alongside the website add-ons.
+  await expect(admin.getByRole("heading", { name: "AI services" })).toBeVisible();
+  await expect(admin.getByText(/AI appointment & inquiry automation/).first()).toContainText("₹2,999.00");
   await shot(admin, "p02-wizard-pricing");
   await admin.getByRole("button", { name: "Save & continue" }).click();
   await expect(admin.getByRole("heading", { name: /Step 3/ })).toBeVisible();

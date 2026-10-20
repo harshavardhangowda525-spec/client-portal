@@ -38,6 +38,7 @@ Go to **Admin → Proposals** to create proposals for websites and mobile apps, 
   - proposal defaults (validity, warranty, terms)
   - packages, whose breakdown must add up to the package price (defaults: ₹4,999 website, ₹55,000 app)
   - optional services with price ranges, where you always enter the actual quoted price
+  - 17 AI services, offered in both website and app proposals (from ₹2,999 for AI appointment & inquiry automation), plus an "AI usage (model API credits)" external cost
   - external costs, which stay "To be confirmed" until you enter a real quote
   - maintenance plans, discount rules (percentage or fixed, optional maximum) and payment milestone templates
 - **8-step wizard**:
@@ -73,7 +74,7 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
-For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` and `005_app_builds.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql`, `005_app_builds.sql` and `006_ai_services.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
 
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
@@ -91,7 +92,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 106 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 108 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:

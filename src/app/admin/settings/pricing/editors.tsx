@@ -125,7 +125,7 @@ type Kind = "service" | "external" | "plan" | "discount";
 type FieldDef = { name: string; label: string; type?: "text" | "number" | "select" | "check" | "textarea"; options?: [string, string][]; hint?: string };
 const FIELDS: Record<Kind, FieldDef[]> = {
   service: [
-    { name: "name", label: "Service" }, { name: "category", label: "For", type: "select", options: [["website", "Website"], ["app", "App"], ["both", "Both"]] },
+    { name: "name", label: "Service" }, { name: "category", label: "For", type: "select", options: [["website", "Website"], ["app", "App"], ["both", "Both"], ["ai", "AI service"]] },
     { name: "unit", label: "Priced", type: "select", options: [["fixed", "Fixed"], ["per_page", "Per page"], ["per_screen", "Per screen"], ["per_item", "Per item"]] },
     { name: "min_price", label: "Min (₹)", type: "number" }, { name: "max_price", label: "Max (₹)", type: "number" },
     { name: "open_ended", label: "Open-ended (shows “+”)", type: "check" }, { name: "default_price", label: "Default price (₹)", type: "number", hint: "Optional. Leave empty to require a quoted price." },
@@ -152,7 +152,7 @@ const FIELDS: Record<Kind, FieldDef[]> = {
   ],
 };
 const COLS: Record<Kind, [string, (r: Record<string, unknown>) => React.ReactNode][]> = {
-  service: [["Service", (r) => r.name as string], ["For", (r) => r.category as string],
+  service: [["Service", (r) => r.name as string], ["For", (r) => ({ website: "Website", app: "App", both: "Both", ai: "AI" } as Record<string, string>)[r.category as string] ?? (r.category as string)],
     ["Range", (r) => (r.min_price == null ? "Custom" : `${formatMoney(Number(r.min_price))}–${formatMoney(Number(r.max_price ?? r.min_price))}${r.open_ended ? "+" : ""}`)]],
   external: [["Service", (r) => r.name as string], ["Billing", (r) => (r.billing === "one_time" ? "One-time" : `Recurring · ${r.period}`)],
     ["Client price", (r) => (r.selling_price == null ? <Badge tone="amber" plain>To be confirmed</Badge> : formatMoney(Number(r.selling_price)))]],

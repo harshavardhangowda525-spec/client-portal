@@ -246,6 +246,8 @@ function StepClient({ s, setS, set, setIn, clients, admins, changeType, locked }
 function StepPricing({ kind, s, setS, catalog }: { kind: "website" | "app"; s: WizardState; setS: Setter; catalog: Catalog }) {
   const pkgs = catalog.packages.filter((p) => p.kind === kind && p.is_active);
   const services = catalog.services.filter((x) => x.is_active && (x.category === kind || x.category === "both"));
+  // AI services can be added to either a website or an app proposal.
+  const aiServices = catalog.services.filter((x) => x.is_active && x.category === "ai");
   const p = s.pricing;
   const setP = (patch: Partial<WizardState["pricing"]>) => setS((x) => ({ ...x, pricing: { ...x.pricing, ...patch } }));
   const togglePkg = (id: string) => {
@@ -339,10 +341,11 @@ function StepPricing({ kind, s, setS, catalog }: { kind: "website" | "app"; s: W
         </div>
       )}
 
-      <div>
-        <h3 className="small" style={{ marginBottom: 8 }}>Optional {kind === "website" ? "website" : "app"} services</h3>
+      {([[`Optional ${kind === "website" ? "website" : "app"} services`, services], ["AI services", aiServices]] as const).map(([heading, list]) => list.length === 0 ? null : (
+      <div key={heading}>
+        <h3 className="small" style={{ marginBottom: 8 }}>{heading}</h3>
         <div className="stack-sm">
-          {services.map((svc) => {
+          {list.map((svc) => {
             const i = selectedAddon(svc);
             const a = i >= 0 ? p.addons[i] : null;
             return (
@@ -366,6 +369,7 @@ function StepPricing({ kind, s, setS, catalog }: { kind: "website" | "app"; s: W
           })}
         </div>
       </div>
+      ))}
       <div>
         <button type="button" className="btn btn-sm" onClick={() => setP({ addons: [...p.addons, { service_id: null, name: "Custom feature", description: null, unit: null, quantity: 1, unit_price: null, range_min: null, range_max: null, open_ended: false }] })}>
           <Icon name="plus" /> Add a custom feature</button>

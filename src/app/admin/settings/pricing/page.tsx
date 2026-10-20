@@ -7,7 +7,7 @@ import { BusinessForm, TaxForm, DefaultsForm, LogoForm, PackageEditor, CatalogTa
 export const metadata = { title: "Pricing configuration" };
 export const dynamic = "force-dynamic";
 
-const SECTIONS = [["business", "Business"], ["tax", "Tax"], ["defaults", "Proposal defaults"], ["packages", "Packages"], ["services", "Optional services"],
+const SECTIONS = [["business", "Business"], ["tax", "Tax"], ["defaults", "Proposal defaults"], ["packages", "Packages"], ["services", "Optional services"], ["ai", "AI services"],
   ["external", "External costs"], ["maintenance", "Maintenance plans"], ["discounts", "Discounts"], ["milestones", "Payment milestones"]];
 
 export default async function PricingConfig() {
@@ -36,7 +36,10 @@ export default async function PricingConfig() {
         </Panel>
 
         <Panel title="Optional services" id="services" sub="Leave the default price empty so you always enter the actual quoted price per proposal.">
-          <CatalogTable kind="service" rows={c.services} />
+          <CatalogTable kind="service" rows={c.services.filter((x) => x.category !== "ai")} />
+        </Panel>
+        <Panel title="AI services" id="ai" sub="Available in both website and app proposals. Prices are starting points: you always confirm the quoted price in each proposal. AI usage fees are under external costs.">
+          <CatalogTable kind="service" rows={c.services.filter((x) => x.category === "ai")} />
         </Panel>
         <Panel title="Domain, hosting & third-party costs" id="external" sub="Leave prices empty until you have a real quote — they show as “To be confirmed”.">
           <CatalogTable kind="external" rows={c.externals} />
