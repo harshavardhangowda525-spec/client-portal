@@ -158,7 +158,7 @@ export async function savePackage(actor: Actor, id: string | null, input: unknow
 }
 
 const serviceSchema = z.object({
-  category: z.enum(["website", "app", "both"]), name: text(200), description: optText(2000), unit: z.enum(["fixed", "per_page", "per_screen", "per_item"]),
+  category: z.enum(["website", "app", "both", "ai"]), name: text(200), description: optText(2000), unit: z.enum(["fixed", "per_page", "per_screen", "per_item"]),
   min_price: optMoney, max_price: optMoney, open_ended: active, default_price: optMoney, is_active: active,
 }).refine((s) => s.min_price == null || s.max_price == null || s.max_price >= s.min_price, "Maximum price must be at least the minimum price");
 
