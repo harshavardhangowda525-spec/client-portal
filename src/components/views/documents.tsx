@@ -6,24 +6,24 @@ import type { ReactNode } from "react";
 type Doc = { id: string; category: string; name: string; mime_type: string; size_bytes: number; visibility: string; created_at: Date; uploader: string | null; uploader_role: string | null };
 type Row = { key: string; name: string; meta: string; href: string; badge?: ReactNode };
 
-export function DocumentLibrary({ docs, quotes, invoices, payments, admin, renderActions }: {
+export function DocumentLibrary({ docs, proposals, invoices, payments, admin, renderActions }: {
   docs: Doc[];
-  quotes: { number: string; versions: { id: string; version_no: number; status: string; created_at: Date }[] }[];
+  proposals: { id: string; number: string; versions: { id: string; version_no: number; status: string; created_at: Date }[] }[];
   invoices: { id: string; number: string; status: string; issue_date: string | null }[];
   payments: { id: string; receipt_number: string | null; paid_on: string | null; status: string }[];
   admin?: boolean; renderActions?: (d: Doc) => ReactNode;
 }) {
   const groups: Record<string, Row[]> = {};
   const push = (cat: string, r: Row) => (groups[cat] ??= []).push(r);
-  for (const q of quotes) for (const v of q.versions.filter((v) => admin || v.status !== "draft")) {
-    push("quotation", { key: v.id, name: `Quotation ${q.number} — version ${v.version_no}`, meta: `${v.status === "accepted" ? "Accepted · " : ""}${fmtDate(v.created_at)}`, href: `/api/quotations/${v.id}/pdf` });
+  for (const q of proposals) for (const v of q.versions.filter((v) => admin || v.status !== "draft")) {
+    push("quotation", { key: v.id, name: `Proposal ${q.number} — version ${v.version_no}`, meta: `${v.status === "accepted" ? "Accepted · " : ""}${fmtDate(v.created_at)}`, href: `/api/proposals/${q.id}/pdf?v=${v.id}` });
   }
   for (const i of invoices.filter((i) => i.status !== "draft" || admin)) push("invoice", { key: i.id, name: `Invoice ${i.number}`, meta: fmtDate(i.issue_date), href: `/api/invoices/${i.id}/pdf` });
   for (const p of payments.filter((p) => p.receipt_number && p.status === "confirmed")) push("invoice", { key: p.id, name: `Receipt ${p.receipt_number}`, meta: fmtDate(p.paid_on), href: `/api/payments/${p.id}/receipt` });
   const uploaded: Record<string, Doc[]> = {};
   for (const d of docs) (uploaded[d.category] ??= []).push(d);
   const cats = Object.keys(DOC_CATEGORIES).filter((c) => groups[c]?.length || uploaded[c]?.length);
-  if (cats.length === 0) return <div className="glass panel"><Empty icon="folder" title="No documents yet">Quotations, invoices and project files will appear here.</Empty></div>;
+  if (cats.length === 0) return <div className="glass panel"><Empty icon="folder" title="No documents yet">Proposals, invoices and project files will appear here.</Empty></div>;
   return (
     <div className="stack">
       {cats.map((c) => (

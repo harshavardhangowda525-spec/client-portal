@@ -14,7 +14,8 @@ export default async function PortalHome() {
   const actor = await requireClient();
   const [projects, proposals] = await Promise.all([clientProjects(actor), listClientProposals(actor)]);
   const awaiting = proposals.filter((p) => ["sent", "viewed"].includes(p.status));
-  if (projects.length === 1 && awaiting.length === 0) redirect(`/portal/${projects[0].id}`);
+  // A project's own proposal is shown on that project's page, so only unlinked ones keep the client here.
+  if (projects.length === 1 && !awaiting.some((p) => !p.project_id)) redirect(`/portal/${projects[0].id}`);
   return (
     <ClientShell actor={actor}>
       <PageHead title={`Welcome, ${actor.name.split(" ")[0]}`} sub={projects.length ? "Choose a project to continue." : "Your proposals from Infinity Web & Apps."} />

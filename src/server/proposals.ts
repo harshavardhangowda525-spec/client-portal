@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { withDb, SYSTEM, assertAdmin, audit, asSystem, nextNumber, type Actor, type Tx } from "./core";
+import { withDb, SYSTEM, assertAdmin, audit, asSystem, nextNumber, getProjectFor, type Actor, type Tx } from "./core";
 import { parse, text, optText, optDate, date, uuid, email as emailSchema } from "./validate";
 import { notifyAdmins, notifyClientUsers } from "./notify";
 import { getProposalDefaults, getTaxConfig, getBusiness, type PackageRow } from "./pricing";
@@ -31,6 +31,8 @@ const inputSchema = z.object({
   ]),
   contact: z.object({ name: text(200), email: emailSchema, phone: optText(40) }),
   business_category: optText(100),
+  /** Project this proposal prices; it links automatically and becomes the project's billing baseline on acceptance. */
+  project_id: optUuid,
   title: text(200),
   project_type: z.enum(PROJECT_TYPES),
   description: optText(10000),
@@ -184,6 +186,10 @@ export async function saveProposal(actor: Actor, proposalId: string | null, raw:
       const [u] = await tx`select 1 from users where id = ${d.assigned_to} and role = 'admin'`;
       if (!u) throw new AppError("The assigned team member was not found.");
     }
+    if (d.project_id) {
+      const [proj] = await tx`select 1 from projects where id = ${d.project_id} and client_id = ${clientId}`;
+      if (!proj) throw new AppError("That project does not belong to this client.");
+    }
     const { pkgs, discount, computed } = await pricingFor(tx, d);
 
     let pid = proposalId;
@@ -191,8 +197,8 @@ export async function saveProposal(actor: Actor, proposalId: string | null, raw:
     let number: string;
     if (!pid) {
       number = await nextNumber(tx, "P");
-      [{ id: pid }] = await tx<{ id: string }[]>`insert into proposals (number, client_id, title, project_type, assigned_to, created_by)
-        values (${number}, ${clientId}, ${d.title}, ${d.project_type}, ${d.assigned_to}, ${actor.userId}) returning id`;
+      [{ id: pid }] = await tx<{ id: string }[]>`insert into proposals (number, client_id, project_id, title, project_type, assigned_to, created_by)
+        values (${number}, ${clientId}, ${d.project_id}, ${d.title}, ${d.project_type}, ${d.assigned_to}, ${actor.userId}) returning id`;
       versionId = "";
     } else {
       const [p] = await tx<{ number: string; client_id: string; cancelled_at: Date | null }[]>`select number, client_id, cancelled_at from proposals where id = ${pid}`;
@@ -206,7 +212,8 @@ export async function saveProposal(actor: Actor, proposalId: string | null, raw:
         const [sent] = await tx`select 1 from proposal_versions where proposal_id = ${pid} and status not in ('draft', 'ready')`;
         if (sent) throw new AppError("The client cannot be changed after a version has been sent.");
       }
-      await tx`update proposals set client_id = ${clientId}, title = ${d.title}, project_type = ${d.project_type}, assigned_to = ${d.assigned_to} where id = ${pid}`;
+      await tx`update proposals set client_id = ${clientId}, title = ${d.title}, project_type = ${d.project_type}, assigned_to = ${d.assigned_to},
+                 project_id = coalesce(project_id, ${d.project_id}) where id = ${pid}`;
       versionId = latest.id;
     }
 
@@ -524,8 +531,8 @@ export async function listClientProposals(actor: Actor) {
   return withDb(actor, async (tx) => {
     // RLS: only this client's proposals, and never drafts.
     const rows = await tx<{ id: string; number: string; title: string; project_type: string; version_id: string; version_no: number; status: string;
-      total: number; recurring_monthly: number; recurring_annual: number; valid_until: string; sent_at: Date | null; accepted_at: Date | null }[]>`
-      select p.id, p.number, p.title, p.project_type, l.id as version_id, l.version_no, l.status, l.total, l.recurring_monthly, l.recurring_annual,
+      total: number; recurring_monthly: number; recurring_annual: number; valid_until: string; sent_at: Date | null; accepted_at: Date | null; project_id: string | null }[]>`
+      select p.id, p.number, p.title, p.project_type, p.project_id, l.id as version_id, l.version_no, l.status, l.total, l.recurring_monthly, l.recurring_annual,
              l.valid_until, l.sent_at, l.accepted_at
       from proposals p join (select distinct on (proposal_id) * from proposal_versions order by proposal_id, version_no desc) l on l.proposal_id = p.id
       order by coalesce(l.sent_at, p.created_at) desc`;
@@ -708,4 +715,33 @@ export async function proposalShareInfo(actor: Actor, proposalId: string) {
   const text = whatsappMessage({ contactName: v.content.contact.name, number: r.proposal.number, title: r.proposal.title, total: Number(v.total),
     monthly: Number(v.recurring_monthly), annual: Number(v.recurring_annual), validUntil: v.valid_until, link, businessName: biz.name });
   return { link, text, whatsapp: whatsappShareLink(v.content.contact.phone ?? r.client.phone, text), portalUsers: r.admin!.portalUsers, pendingInvite: r.admin!.pendingInvite };
+}
+
+/** Proposals linked to a project, with their versions (clients never see drafts, enforced by RLS). */
+export async function listProjectProposals(actor: Actor, projectId: string) {
+  return withDb(actor, async (tx) => {
+    await getProjectFor(tx, actor, projectId);
+    const rows = await tx<{ proposal_id: string; number: string; title: string; id: string; version_no: number; status: string; valid_until: string; total: number; created_at: Date; accepted_at: Date | null }[]>`
+      select p.id as proposal_id, p.number, p.title, v.id, v.version_no, v.status, v.valid_until, v.total, v.created_at, v.accepted_at
+      from proposals p join proposal_versions v on v.proposal_id = p.id
+      where p.project_id = ${projectId} order by p.created_at desc, v.version_no desc`;
+    const out: { id: string; number: string; title: string; versions: (typeof rows)[number][] }[] = [];
+    for (const r of rows) {
+      let p = out.find((x) => x.id === r.proposal_id);
+      if (!p) out.push((p = { id: r.proposal_id, number: r.number, title: r.title, versions: [] }));
+      p.versions.push({ ...r, status: effectiveProposalStatus(r) });
+    }
+    return out;
+  });
+}
+
+/** A client's proposals that aren't linked to any project yet (latest visible version of each). */
+export async function unlinkedClientProposals(actor: Actor, clientId: string) {
+  return withDb(actor, async (tx) => {
+    const rows = await tx<{ id: string; number: string; title: string; status: string; valid_until: string; total: number; version_no: number }[]>`
+      select p.id, p.number, p.title, l.status, l.valid_until, l.total, l.version_no
+      from proposals p join (select distinct on (proposal_id) * from proposal_versions ${actor.role === "client" ? tx`where status <> 'draft'` : tx``} order by proposal_id, version_no desc) l on l.proposal_id = p.id
+      where p.client_id = ${clientId} and p.project_id is null and p.cancelled_at is null order by p.created_at desc`;
+    return rows.map((r) => ({ ...r, status: effectiveProposalStatus(r) }));
+  });
 }

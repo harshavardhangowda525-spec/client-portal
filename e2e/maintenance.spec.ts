@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { createProjectProposal } from "./helpers";
 
 /**
  * Maintenance expiry & billing through the real UI: payment details → free period ends → client opts in
@@ -35,7 +36,7 @@ test("maintenance expiry, opt-in and UPI payment", async ({ browser }) => {
   await expect(admin.locator(".qr-box svg")).toBeVisible();
   await shot(admin, "m01-admin-payment-settings");
 
-  // Client + project + quotation (starts the free period) + invitation
+  // Client + project + proposal (starts the free period) + invitation
   await admin.goto("/admin/clients/new");
   await admin.getByLabel("Business name").fill(`Spice Route ${stamp}`);
   await admin.getByLabel("Owner name").fill("Arjun Rao");
@@ -48,9 +49,7 @@ test("maintenance expiry, opt-in and UPI payment", async ({ browser }) => {
   await admin.getByRole("button", { name: "Create project" }).click();
   await expect(admin).toHaveURL(/\/admin\/projects\/[0-9a-f-]{36}$/);
   const projectId = admin.url().split("/").pop()!;
-  await admin.goto(`/admin/projects/${projectId}/quotations`);
-  await admin.getByRole("button", { name: "Create draft" }).click();
-  await expect(admin.getByRole("heading", { name: "Draft quotation" })).toBeVisible();
+  await createProjectProposal(admin, `/admin/projects/${projectId}`);
   await admin.goto(clientUrl);
   await admin.getByRole("button", { name: "Create invitation link" }).click();
   const inviteLink = (await admin.locator("code").filter({ hasText: "/invite/" }).textContent())!.trim();

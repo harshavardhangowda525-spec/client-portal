@@ -36,7 +36,7 @@ export const MILESTONE_STATUS: Record<string, string> = {
 
 export const PROJECT_STATUS: Record<string, string> = {
   proposal: "Proposal",
-  quotation_accepted: "Quotation accepted",
+  quotation_accepted: "Proposal accepted",
   active: "In development",
   awaiting_client: "Waiting for client input",
   on_hold: "On hold",
@@ -55,17 +55,6 @@ export const PROJECT_TYPES: Record<string, string> = {
   other: "Other",
 };
 
-export const QUOTE_STATUS: Record<string, string> = {
-  draft: "Draft",
-  sent: "Sent",
-  viewed: "Viewed",
-  accepted: "Accepted",
-  changes_requested: "Changes requested",
-  rejected: "Rejected",
-  expired: "Expired",
-  superseded: "Superseded",
-  withdrawn: "Withdrawn",
-};
 
 export const PREVIEW_STATUS: Record<string, string> = {
   ready_for_review: "Ready for review",
@@ -94,7 +83,7 @@ export const PAYMENT_METHODS: Record<string, string> = {
 };
 
 export const DOC_CATEGORIES: Record<string, string> = {
-  quotation: "Quotations",
+  quotation: "Proposals",
   invoice: "Invoices",
   requirements: "Approved requirements",
   brand_asset: "Brand assets",

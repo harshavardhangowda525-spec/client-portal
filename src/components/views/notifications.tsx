@@ -15,7 +15,7 @@ export function NotificationList({ items }: { items: N[] }) {
         <span className="small muted">{unread} unread</span>
         {unread > 0 && <ActionButton action={markNotificationsReadAction.bind(null, undefined)} className="btn btn-sm">Mark all as read</ActionButton>}
       </div>
-      {items.length === 0 ? <Empty icon="bell" title="You're all caught up">New quotations, updates and payment confirmations will appear here.</Empty> : (
+      {items.length === 0 ? <Empty icon="bell" title="You're all caught up">New proposals, updates and payment confirmations will appear here.</Empty> : (
         <div className="list">
           {items.map((n) => (
             <div key={n.id} className="list-item" style={{ alignItems: "flex-start", opacity: n.read_at ? 0.65 : 1 }}>

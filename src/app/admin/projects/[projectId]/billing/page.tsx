@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { getBilling } from "@/server/billing";
 import { Empty, InvoiceBadge, Money, Panel, PaymentBadge } from "@/components/ui";
@@ -14,12 +15,12 @@ export default async function AdminBilling({ params }: { params: Promise<{ proje
   const actor = await requireAdmin();
   const { projectId } = await params;
   const b = await getBilling(actor, projectId);
-  const cur = b.quotation?.currency ?? "INR";
+  const cur = b.proposal?.currency ?? "INR";
   const payable = b.invoices.filter((i) => ["issued", "partially_paid"].includes(i.status));
   return (
     <div className="stack">
       <div className="grid grid-3">
-        <Panel><span className="tiny faint">Accepted quotation total</span><div className="stat-value"><Money value={b.contractTotal} currency={cur} /></div><span className="tiny faint">{b.quotation ? `${b.quotation.number} v${b.quotation.version_no}` : "No accepted quotation yet"}</span></Panel>
+        <Panel><span className="tiny faint">Accepted proposal total</span><div className="stat-value"><Money value={b.contractTotal} currency={cur} /></div><span className="tiny faint">{b.proposal ? <Link href={`/admin/proposals/${b.proposal.proposal_id}`}>{b.proposal.number} v{b.proposal.version_no}</Link> : <>No accepted proposal yet · <Link href={`/admin/projects/${projectId}/proposal`}>Proposal tab</Link></>}</span></Panel>
         <Panel><span className="tiny faint">Confirmed received</span><div className="stat-value" style={{ color: "#6ee7b7" }}><Money value={b.paidTotal} currency={cur} /></div><span className="tiny faint">Remaining <Money value={b.remaining} currency={cur} /></span></Panel>
         <Panel><span className="tiny faint">Outstanding on issued invoices</span><div className="stat-value"><Money value={b.outstandingInvoiced} currency={cur} /></div>
           <span className="tiny" style={{ color: b.overdueInvoices.length ? "var(--red)" : "var(--text-3)" }}>{b.overdueInvoices.length} overdue</span></Panel>
@@ -28,8 +29,8 @@ export default async function AdminBilling({ params }: { params: Promise<{ proje
 
       <div className="grid grid-main" style={{ alignItems: "start" }}>
         <div className="stack">
-          <Panel title="Payment schedule" sub="From the accepted quotation.">
-            {b.terms.length === 0 ? <p className="small muted">Payment milestones appear once the client accepts a quotation.</p> : (
+          <Panel title="Payment schedule" sub="From the accepted proposal's payment milestones.">
+            {b.terms.length === 0 ? <p className="small muted">Payment milestones appear once the client accepts a proposal for this project.</p> : (
               <div className="table-wrap"><table className="table">
                 <thead><tr><th>Milestone</th><th className="num">Amount</th><th>Invoice</th></tr></thead>
                 <tbody>{b.terms.map((t, idx) => (

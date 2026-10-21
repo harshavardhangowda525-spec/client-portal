@@ -58,7 +58,7 @@ export default async function Overview({ params }: { params: Promise<{ projectId
                 <div className="grow stack-sm">
                   <div className="row">
                     <strong style={{ fontWeight: 500 }}>{a.title}</strong>
-                    <Badge tone="amber" plain>{{ quotation: "Quotation", approval: "Response needed", preview: "Preview", invoice: "Payment" }[a.kind]}</Badge>
+                    <Badge tone="amber" plain>{{ proposal: "Proposal", approval: "Response needed", preview: "Preview", invoice: "Payment" }[a.kind]}</Badge>
                   </div>
                   {a.detail && <p className="small muted pre">{a.detail}</p>}
                   {a.due && <span className="tiny faint">Due {fmtDate(a.due)}</span>}

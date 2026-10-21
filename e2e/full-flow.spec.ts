@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 /**
  * Full business workflow through the real UI:
- * client + project → quotation → invitation → client accepts → commencement →
+ * client + project → proposal → invitation → client accepts → commencement →
  * milestones → preview feedback → invoice & payment → handover.
  *
  * Requires a running app and an existing admin:
@@ -50,21 +50,28 @@ test("complete client project workflow", async ({ browser }) => {
   const projectUrl = admin.url();
   await shot(admin, "02-admin-project-overview");
 
-  // --- Admin: create a quotation from the template, add GST, save and send
-  await admin.goto(`${projectUrl}/quotations`);
-  await admin.getByRole("button", { name: "Create draft" }).click();
-  await expect(admin.getByRole("heading", { name: "Draft quotation" })).toBeVisible();
-  await admin.getByLabel("Tax rate percent").fill("18");
-  await admin.getByLabel("Tax label").fill("GST");
-  await expect(admin.getByText("₹47,200.00").first()).toBeVisible(); // 40,000 + 18%
-  await admin.getByRole("button", { name: "Save draft" }).click();
-  await expect(admin.getByText("Draft saved.")).toBeVisible();
-  await shot(admin, "03-admin-quotation-editor");
+  // --- Admin: create the project's proposal from its Proposal tab (links to the project automatically)
+  await admin.goto(`${projectUrl}/proposal`);
+  await expect(admin.getByText("No proposal yet")).toBeVisible();
+  await admin.getByRole("link", { name: "Create proposal for this project" }).click();
+  await expect(admin.getByText(/For project “Cafe Website Development”/)).toBeVisible();
+  await admin.getByRole("button", { name: "Save & continue" }).click();
+  await expect(admin.getByText(/Draft saved · IWA-P-/)).toBeVisible();
+  await admin.getByLabel(/Additional page/).first().check();
+  await admin.getByLabel("Quoted price (₹)").first().fill("1001");
+  await expect(admin.locator(".grand").getByText("₹6,000.00")).toBeVisible();
+  for (let i = 0; i < 5; i++) await admin.getByRole("button", { name: "Save & continue" }).click(); // steps 2–6
+  await admin.getByRole("button", { name: "Use “Two payments”" }).click();
+  await expect(admin.getByText(/Milestones total ₹6,000.00 of ₹6,000.00 ✓/)).toBeVisible();
+  await admin.getByRole("button", { name: "Save & continue" }).click();
+  await admin.getByRole("button", { name: "Save & preview" }).click();
+  await expect(admin).toHaveURL(/\/admin\/proposals\/[0-9a-f-]{36}$/);
+  await shot(admin, "03-admin-proposal-preview");
+  await admin.getByRole("button", { name: "Mark ready to send" }).click();
+  await expect(admin.getByText("Marked ready to send.")).toBeVisible();
   admin.once("dialog", (d) => d.accept());
   await admin.getByRole("button", { name: "Send to client" }).click();
-  await expect(admin.getByText(/Quotation sent/)).toBeVisible();
-  await admin.reload();
-  await expect(admin.getByText(/has been sent and can no longer be edited/)).toBeVisible();
+  await expect(admin.getByText(/Published to the client portal/)).toBeVisible();
 
   // --- Admin: invite the client (email not configured → copy link)
   await admin.goto(clientUrl);
@@ -95,29 +102,30 @@ test("complete client project workflow", async ({ browser }) => {
   await expect(otherPage.getByText("This invitation has already been used")).toBeVisible();
   await other.close();
 
-  // --- Client: review and accept the quotation
-  await client.goto(`${portalUrl}/quotation`);
-  await expect(client.getByText("Services & pricing")).toBeVisible();
-  await shot(client, "07-client-quotation");
-  await client.getByRole("button", { name: "Accept quotation" }).click();
-  await client.getByLabel(/reviewed the services/).check();
-  await client.getByLabel(/agree to the payment milestones/).check();
-  await client.getByRole("button", { name: "Accept & sign" }).click();
-  await expect(client.getByText(/Quotation accepted/)).toBeVisible();
-  await client.reload();
-  await expect(client.getByText(/Accepted by Priya Sharma/)).toBeVisible();
+  // --- Client: review and accept the proposal from the project menu
+  await expect(client.getByText(/Review proposal IWA-P-/)).toBeVisible();
+  await client.goto(`${portalUrl}/proposal`);
+  await expect(client).toHaveURL(/\/portal\/proposals\/[0-9a-f-]{36}$/);
+  await expect(client.locator(".doc .grand").getByText("₹6,000.00")).toBeVisible();
+  await shot(client, "07-client-proposal");
+  await client.getByRole("button", { name: "Review & accept" }).click();
+  await client.getByLabel(/read the scope/).check();
+  await client.getByLabel(/one-time total and the payment schedule/).check();
+  await client.getByLabel(/recurring and third-party costs/).check();
+  await client.getByRole("button", { name: "Accept proposal" }).click();
+  await expect(client.getByText(/Proposal accepted/)).toBeVisible();
 
-  // --- Admin: notified; activate project
-  await admin.goto("/admin/notifications");
-  await expect(admin.getByText(/accepted quotation IWA-Q-/).first()).toBeVisible();
+  // --- Admin: notified; the accepted proposal is the project's price; activate project
+  await admin.goto(`${projectUrl}/proposal`);
+  await expect(admin.locator(".stat-value").first()).toHaveText("₹6,000.00");
   await admin.goto(projectUrl);
-  await expect(admin.getByText(/client accepted the quotation/)).toBeVisible();
+  await expect(admin.getByText(/client accepted the proposal/)).toBeVisible();
   await admin.getByRole("button", { name: /Confirm commencement/ }).click();
   await expect(admin.getByText(/Project activated/)).toBeVisible();
 
   // --- Admin: progress milestones
   await admin.goto(`${projectUrl}/milestones`);
-  for (const title of ["Offer accepted", "Requirements collected", "Quotation approved", "Advance payment confirmed"]) {
+  for (const title of ["Offer accepted", "Requirements collected", "Proposal approved", "Advance payment confirmed"]) {
     await admin.getByRole("button", { name: `Edit ${title}` }).click();
     const dialog = admin.getByRole("dialog");
     await dialog.getByLabel("Status").selectOption("completed");
@@ -195,7 +203,7 @@ test("complete client project workflow", async ({ browser }) => {
   await expect(admin.getByText(/Invoice issued/)).toBeVisible();
   await admin.reload();
   await admin.locator("#rp-inv").selectOption({ index: 1 });
-  await admin.locator("#rp-amt").fill("23600");
+  await admin.locator("#rp-amt").fill("3000");
   await admin.getByLabel("Method").selectOption("upi");
   await admin.getByLabel("Transaction reference").fill("UPI-REF-123456");
   await admin.getByLabel("Confirmation").selectOption("confirmed");
@@ -206,7 +214,7 @@ test("complete client project workflow", async ({ browser }) => {
   // --- Client: sees invoice paid and the balance
   await client.goto(`${portalUrl}/payments`);
   await expect(client.getByText("UPI-REF-123456")).toBeVisible();
-  await expect(client.getByText("₹23,600.00").first()).toBeVisible();
+  await expect(client.getByText("₹3,000.00").first()).toBeVisible();
   await client.screenshot({ path: `${SHOTS ?? "test-results"}/12b-client-payments-viewport.png` });
   await shot(client, "12-client-payments");
   const pdf = await client.request.get(await client.getByRole("link", { name: "Receipt" }).first().getAttribute("href") as string);

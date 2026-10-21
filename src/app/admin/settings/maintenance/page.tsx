@@ -47,8 +47,8 @@ export default async function MaintenanceSettings() {
       <Panel title="Maintenance plan" id="plan" className="section">
         <ActionForm action={saveMaintenanceSettingsAction} className="form-grid" toast>
           <F label="Free period starts when"><select name="trigger" className="select" defaultValue={s.trigger}>
-            <option value="proposal_initiated">The proposal/quotation is created (default)</option>
-            <option value="proposal_accepted">The client accepts the proposal/quotation</option>
+            <option value="proposal_initiated">The proposal is created (default)</option>
+            <option value="proposal_accepted">The client accepts the proposal</option>
             <option value="project_delivered">The project is marked completed</option>
           </select></F>
           <F label="Free period (months)"><input name="free_months" type="number" min="1" max="60" className="input" defaultValue={s.free_months} required /></F>

@@ -9,7 +9,7 @@ export default async function NewClientPage() {
   await requireAdmin();
   return (
     <div className="narrow-wrap">
-      <PageHead eyebrow="Step 1 of 3" title="Add a client" sub="Next you will create their project, then prepare a quotation and invite them to the portal." />
+      <PageHead eyebrow="Step 1 of 3" title="Add a client" sub="Next you will create their project, then prepare a proposal and invite them to the portal." />
       <Panel><ClientForm action={createClientAction} submitLabel="Create client" /></Panel>
     </div>
   );

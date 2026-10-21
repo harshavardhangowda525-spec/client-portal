@@ -58,7 +58,7 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
       </nav>
 
       <Panel>
-        {rows.length === 0 ? <Empty icon="wrench" title="Nothing here">Projects appear once a proposal or quotation is created for them.</Empty> : (
+        {rows.length === 0 ? <Empty icon="wrench" title="Nothing here">Projects appear once a proposal is created for them.</Empty> : (
           <div className="table-wrap"><table className="table table-cards">
             <thead><tr><th>Client / project</th><th>Proposal initiated</th><th>Free period</th><th className="num">Days left</th><th className="num">Fee</th><th>Status</th><th>Email</th><th>WhatsApp</th><th>Next billing</th></tr></thead>
             <tbody>{rows.map((r) => (

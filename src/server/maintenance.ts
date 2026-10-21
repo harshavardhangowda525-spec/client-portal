@@ -233,14 +233,8 @@ export async function syncMaintenance(tx: Tx, today = istToday(), projectId?: st
   const s = await getMaintenanceSettings(tx);
   const rows = await tx<(Row & { initiated: Date | null; accepted: Date | null })[]>`
     select p.*,
-      least(
-        (select min(q.created_at) from quotations q where q.project_id = p.id),
-        (select min(pr.created_at) from proposals pr where pr.project_id = p.id)
-      ) as initiated,
-      least(
-        (select min(v.accepted_at) from quotation_versions v where v.project_id = p.id),
-        (select min(pv.accepted_at) from proposal_versions pv join proposals pr on pr.id = pv.proposal_id where pr.project_id = p.id)
-      ) as accepted
+      (select min(pr.created_at) from proposals pr where pr.project_id = p.id) as initiated,
+      (select min(pv.accepted_at) from proposal_versions pv join proposals pr on pr.id = pv.proposal_id where pr.project_id = p.id) as accepted
     from projects p ${projectId ? tx`where p.id = ${projectId}` : tx``}`;
   for (const p of rows) {
     let start = p.free_maintenance_start_date;

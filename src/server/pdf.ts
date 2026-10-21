@@ -1,8 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { company } from "@/lib/config";
 import { formatMoneyPlain } from "@/lib/money";
-import { fmtDate, fmtDateTime, PAYMENT_METHODS, QUOTE_STATUS, INVOICE_STATUS, PROJECT_TYPE_LABELS, periodLabel } from "@/lib/format";
-import type { QuoteItem, QuoteVersion } from "./quotations";
+import { fmtDate, fmtDateTime, PAYMENT_METHODS, INVOICE_STATUS, PROJECT_TYPE_LABELS, periodLabel } from "@/lib/format";
 
 const NAVY = rgb(0.035, 0.07, 0.16);
 const BLUE = rgb(0.18, 0.47, 1);
@@ -219,56 +218,6 @@ class Writer {
   save() {
     return this.doc.save();
   }
-}
-
-export async function quotationPdf(
-  v: QuoteVersion & { number: string; title: string },
-  items: QuoteItem[],
-  acceptance: { signer_name: string; accepted_at: Date; content_hash: string; user_email: string } | null,
-  brand?: PdfBrand,
-) {
-  const w = await Writer.create(`Quotation ${v.number}`, brand);
-  const m = (n: number) => formatMoneyPlain(Number(n), v.currency);
-  await w.header("Quotation", `${v.number}  ·  Version ${v.version_no}`, QUOTE_STATUS[v.status] ?? v.status);
-  const c = v.client_snapshot;
-  w.twoCol(
-    [["Prepared for", `${c.owner_name ?? ""}${c.business_name ? `, ${c.business_name}` : ""}`], ["Contact", [c.email, c.phone].filter(Boolean).join("  |  ")], ["Project", v.title]],
-    [["Quotation date", fmtDate(v.issue_date)], ["Valid until", fmtDate(v.valid_until)], ["Estimated delivery", v.delivery_timeline?.slice(0, 60) ?? "-"]],
-  );
-  if (v.project_description) { w.heading("Project description"); w.text(v.project_description, { size: 9.5 }); }
-  w.heading("Services & pricing");
-  w.table(
-    [{ label: "Service", width: 275 }, { label: "Qty", width: 50, align: "right" }, { label: "Unit price", width: 87, align: "right" }, { label: "Amount", width: 87, align: "right" }],
-    items.map((i) => [i.description, String(Number(i.quantity)), m(i.unit_price), m(i.amount)]),
-    items.map((i) => i.details),
-  );
-  w.y -= 8;
-  const t: [string, string, boolean?][] = [["Subtotal", m(v.subtotal)]];
-  if (Number(v.discount_amount) > 0) t.push([`Discount${v.discount_type === "percent" ? ` (${Number(v.discount_value)}%)` : ""}`, `- ${m(v.discount_amount)}`]);
-  if (Number(v.tax_rate) > 0) t.push([`${v.tax_label} (${Number(v.tax_rate)}%)`, m(v.tax_amount)]);
-  t.push(["Total", m(v.total), true]);
-  w.totals(t);
-  if (v.payment_terms.length) {
-    w.heading("Payment milestones");
-    w.table([{ label: "Milestone", width: 220 }, { label: "Due", width: 160 }, { label: "Share", width: 45, align: "right" }, { label: "Amount", width: 74, align: "right" }],
-      v.payment_terms.map((p) => [p.label, p.due, `${p.percent}%`, m(p.amount ?? 0)]));
-    w.text("Payments are recorded only after they have been received and confirmed.", { size: 8.5, color: MUTED });
-  }
-  if (v.included_features.length) { w.heading("Included"); w.bullets(v.included_features); }
-  if (v.exclusions.length) { w.heading("Not included"); w.bullets(v.exclusions); }
-  w.heading("Revisions"); w.text(`${v.revisions_included} round${v.revisions_included === 1 ? "" : "s"} of revisions are included. Further revisions are quoted separately.`, { size: 9.5 });
-  if (v.maintenance_terms) { w.heading("Maintenance & support"); w.text(v.maintenance_terms, { size: 9.5 }); }
-  if (v.domain_hosting_terms) { w.heading("Domain & hosting"); w.text(v.domain_hosting_terms, { size: 9.5 }); }
-  if (v.delivery_timeline) { w.heading("Estimated timeline"); w.text(v.delivery_timeline, { size: 9.5 }); }
-  if (v.terms_conditions) { w.heading("Terms & conditions"); w.text(v.terms_conditions, { size: 9 }); }
-  w.heading("Acceptance");
-  if (acceptance) {
-    w.text(`Accepted electronically by ${acceptance.signer_name} (${acceptance.user_email}) on ${fmtDateTime(acceptance.accepted_at)}.`, { size: 9.5, bold: true });
-    w.text(`Version ${v.version_no}. Content fingerprint (SHA-256): ${acceptance.content_hash}`, { size: 8, color: MUTED });
-  } else {
-    w.text("This quotation can be reviewed and accepted securely in your client portal.", { size: 9.5, color: MUTED });
-  }
-  return w.save();
 }
 
 export async function invoicePdf(data: {

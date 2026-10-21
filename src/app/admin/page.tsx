@@ -28,15 +28,15 @@ export default async function AdminDashboard() {
           <div className="list">
             {d.accepted.map((p) => (
               <Link key={p.id} href={`/admin/projects/${p.id}`} className="list-item">
-                <Badge tone="green" plain>Quotation accepted</Badge>
+                <Badge tone="green" plain>Proposal accepted</Badge>
                 <div className="grow small"><strong style={{ fontWeight: 500 }}>{p.business_name}</strong> accepted — confirm commencement for <em>{p.name}</em>.</div>
                 <Icon name="external" />
               </Link>
             ))}
             {d.changeReqs.map((q) => (
-              <Link key={q.id} href={`/admin/projects/${q.project_id}/quotations/${q.quotation_id}`} className="list-item">
+              <Link key={q.id} href={`/admin/proposals/${q.proposal_id}`} className="list-item">
                 <Badge tone="amber" plain>Changes requested</Badge>
-                <div className="grow small truncate">{q.number}: {q.client_response_note}</div>
+                <div className="grow small truncate">{q.number} · {q.business_name}: {q.client_response_note}</div>
                 <Icon name="external" />
               </Link>
             ))}

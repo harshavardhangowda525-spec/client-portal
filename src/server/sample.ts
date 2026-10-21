@@ -1,6 +1,5 @@
 import { withDb, SYSTEM, type Actor } from "@/lib/db";
 import * as C from "./clients";
-import * as Q from "./quotations";
 import * as M from "./milestones";
 import * as X from "./content";
 
@@ -19,8 +18,6 @@ export async function seedSampleData() {
     await tx`update client_profiles set is_sample = true where id = ${clientId}`;
     await tx`update projects set is_sample = true where id = ${projectId}`;
   });
-  const { versionId } = await Q.createQuotation(actor, projectId, { title: "[SAMPLE] Cafe website quotation" });
-  await Q.sendQuotation(actor, versionId);
   const ms = await M.listMilestones(actor, projectId);
   await M.updateMilestone(actor, ms[0].id, { ...ms[0], status: "completed", note: "Sample: offer accepted" });
   await M.updateMilestone(actor, ms[1].id, { ...ms[1], status: "in_progress", note: "Sample: gathering menu and photos" });

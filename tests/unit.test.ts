@@ -3,7 +3,7 @@ import { computeTotals, splitPaymentTerms } from "@/lib/money";
 import { computeProgress, isOverdue } from "@/lib/progress";
 import { verifyCheckoutSignature, verifyWebhookSignature } from "@/server/razorpay";
 import { hmacSha256Hex, hashPassword, verifyPassword, stableStringify } from "@/lib/crypto";
-import { effectiveStatus } from "@/server/quotations";
+import { effectiveProposalStatus } from "@/server/proposals";
 
 describe("money", () => {
   it("computes totals with discount and tax in paise", () => {
@@ -35,10 +35,10 @@ describe("progress", () => {
   });
 });
 
-describe("quotation status", () => {
-  it("treats sent quotations past their expiry date as expired", () => {
-    expect(effectiveStatus({ status: "sent", valid_until: "2020-01-01" }, "2026-01-01")).toBe("expired");
-    expect(effectiveStatus({ status: "accepted", valid_until: "2020-01-01" }, "2026-01-01")).toBe("accepted");
+describe("proposal status", () => {
+  it("treats sent proposals past their validity date as expired", () => {
+    expect(effectiveProposalStatus({ status: "sent", valid_until: "2020-01-01" }, "2026-01-01")).toBe("expired");
+    expect(effectiveProposalStatus({ status: "accepted", valid_until: "2020-01-01" }, "2026-01-01")).toBe("accepted");
   });
 });
 

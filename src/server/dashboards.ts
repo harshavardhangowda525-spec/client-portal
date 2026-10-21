@@ -1,6 +1,5 @@
 import { withDb, assertAdmin, getProjectFor, type Actor, type Tx } from "./core";
 import { computeProgress, isOverdue, todayISO } from "@/lib/progress";
-import { effectiveStatus } from "./quotations";
 import type { Milestone } from "./milestones";
 
 async function milestonesOf(tx: Tx, projectId: string) {
@@ -21,16 +20,18 @@ function milestoneSummary(ms: Milestone[]) {
   };
 }
 
-export type PendingAction = { kind: "quotation" | "approval" | "preview" | "invoice"; id: string; title: string; detail?: string | null; due?: string | null; href: string };
+export type PendingAction = { kind: "proposal" | "approval" | "preview" | "invoice"; id: string; title: string; detail?: string | null; due?: string | null; href: string };
 
 async function pendingClientActions(tx: Tx, projectId: string): Promise<PendingAction[]> {
   const actions: PendingAction[] = [];
-  const quotes = await tx<{ id: string; quotation_id: string; status: string; valid_until: string; number: string; version_no: number }[]>`
-    select v.id, v.quotation_id, v.status, v.valid_until, q.number, v.version_no from quotation_versions v join quotations q on q.id = v.quotation_id
-    where v.project_id = ${projectId} and v.status in ('sent', 'viewed')
-      and not exists (select 1 from quotation_versions n where n.quotation_id = v.quotation_id and n.version_no > v.version_no and n.status <> 'draft')`;
-  for (const q of quotes.filter((q) => effectiveStatus(q) !== "expired")) {
-    actions.push({ kind: "quotation", id: q.id, title: `Review quotation ${q.number}${q.version_no > 1 ? ` v${q.version_no}` : ""}`, due: q.valid_until, href: `/portal/${projectId}/quotation` });
+  // Proposals awaiting the client's response: linked to this project, or not yet linked to any project.
+  const proposals = await tx<{ id: string; number: string; version_no: number; valid_until: string }[]>`
+    select p.id, p.number, l.version_no, l.valid_until
+    from projects pr join proposals p on p.client_id = pr.client_id and (p.project_id = pr.id or p.project_id is null)
+    join (select distinct on (proposal_id) * from proposal_versions where status <> 'draft' order by proposal_id, version_no desc) l on l.proposal_id = p.id
+    where pr.id = ${projectId} and p.cancelled_at is null and l.status in ('sent', 'viewed') and l.valid_until >= current_date`;
+  for (const q of proposals) {
+    actions.push({ kind: "proposal", id: q.id, title: `Review proposal ${q.number}${q.version_no > 1 ? ` v${q.version_no}` : ""}`, due: q.valid_until, href: `/portal/proposals/${q.id}` });
   }
   const approvals = await tx<{ id: string; title: string; description: string | null; kind: string; due_date: string | null }[]>`
     select id, title, description, kind, due_date from approval_requests where project_id = ${projectId} and status = 'pending' order by created_at`;
@@ -88,11 +89,13 @@ export async function adminDashboard(actor: Actor) {
     const waiting = await tx<{ project_id: string; n: number }[]>`
       select project_id, count(*)::int as n from approval_requests where status = 'pending' group by project_id`;
     const quotesOut = await tx<{ project_id: string; n: number }[]>`
-      select project_id, count(*)::int as n from quotation_versions where status in ('sent', 'viewed') and valid_until >= current_date group by project_id`;
-    const changeReqs = await tx<{ project_id: string; id: string; quotation_id: string; number: string; client_response_note: string | null }[]>`
-      select v.project_id, v.id, v.quotation_id, q.number, v.client_response_note from quotation_versions v join quotations q on q.id = v.quotation_id
-      where v.status = 'changes_requested'
-        and not exists (select 1 from quotation_versions n where n.quotation_id = v.quotation_id and n.version_no > v.version_no)`;
+      select p.project_id, count(*)::int as n from proposal_versions v join proposals p on p.id = v.proposal_id
+      where p.project_id is not null and p.cancelled_at is null and v.status in ('sent', 'viewed') and v.valid_until >= current_date group by p.project_id`;
+    const changeReqs = await tx<{ project_id: string | null; id: string; proposal_id: string; number: string; client_response_note: string | null; business_name: string }[]>`
+      select p.project_id, v.id, v.proposal_id, p.number, v.client_response_note, c.business_name
+      from proposal_versions v join proposals p on p.id = v.proposal_id join client_profiles c on c.id = p.client_id
+      where v.status = 'changes_requested' and p.cancelled_at is null
+        and not exists (select 1 from proposal_versions n where n.proposal_id = v.proposal_id and n.version_no > v.version_no)`;
     const accepted = await tx<{ id: string; name: string; business_name: string }[]>`
       select p.id, p.name, c.business_name from projects p join client_profiles c on c.id = p.client_id where p.status = 'quotation_accepted'`;
     const overdueInvoices = await tx<{ id: string; project_id: string; number: string; amount: number; due_date: string; project_name: string }[]>`

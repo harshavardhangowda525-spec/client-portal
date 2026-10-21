@@ -1,22 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { makeAdmin, rawSystem } from "./helpers";
+import { makeAdmin, rawSystem, sendProjectProposal, acceptAsClient } from "./helpers";
 import { seedSampleData, removeSampleData } from "@/server/sample";
 import { acceptInvitation } from "@/server/clients";
 import { actorFromToken } from "@/server/auth";
-import * as Q from "@/server/quotations";
 
 describe("sample data", () => {
   it("seeds clearly-flagged sample data and removes it completely, even after acceptance", async () => {
-    await makeAdmin();
+    const admin = await makeAdmin();
     const s = await seedSampleData();
     const [p] = await rawSystem((tx) => tx`select is_sample from projects where id = ${s.projectId}`);
     expect(p.is_sample).toBe(true);
-    // a sample client accepting a quotation creates immutable rows that removal must still clear
+    // a sample client accepting a proposal creates immutable rows that removal must still clear
     const session = await acceptInvitation(s.inviteLink.split("/invite/")[1], { name: "Sample Owner", password: "SamplePass123" });
     const client = (await actorFromToken(session.token))!;
-    const [q] = await Q.listProjectQuotations(client, s.projectId);
-    const { hash } = await Q.getVersion(client, q.versions[0].id);
-    await Q.acceptQuotation(client, q.versions[0].id, { signer_name: "Sample Owner", confirm_scope: true, confirm_terms: true, content_hash: hash });
+    const { proposalId } = await sendProjectProposal(admin, s.clientId, s.projectId);
+    await acceptAsClient(client, proposalId, "Sample Owner");
     const r = await removeSampleData();
     expect(r.projects).toBeGreaterThanOrEqual(1);
     const left = await rawSystem((tx) => tx`select
