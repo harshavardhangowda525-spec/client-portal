@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireClient } from "@/lib/session";
 import { getBilling } from "@/server/billing";
 import { Empty, InvoiceBadge, Money, PageHead, Panel } from "@/components/ui";
@@ -15,13 +16,13 @@ export default async function PaymentsPage({ params }: { params: Promise<{ proje
   const { projectId } = await params;
   const [b, pd] = await Promise.all([getBilling(actor, projectId), getPaymentDetails()]);
   const online = integrations().razorpay && !actor.viewAs;
-  const cur = b.quotation?.currency ?? "INR";
+  const cur = b.proposal?.currency ?? "INR";
   return (
     <>
       <PageHead eyebrow="Billing" title="Invoices & payments" sub="Only payments that have been received and confirmed are shown as paid." />
       <div className="grid grid-3">
         <Panel><span className="tiny faint">Project total</span><div className="stat-value"><Money value={b.contractTotal} currency={cur} /></div>
-          <span className="tiny faint">{b.quotation ? `Accepted quotation ${b.quotation.number} v${b.quotation.version_no}` : "Awaiting quotation acceptance"}</span></Panel>
+          <span className="tiny faint">{b.proposal ? <Link href={`/portal/proposals/${b.proposal.proposal_id}`}>Accepted proposal {b.proposal.number} v{b.proposal.version_no}</Link> : "Awaiting proposal acceptance"}</span></Panel>
         <Panel><span className="tiny faint">Paid so far</span><div className="stat-value" style={{ color: "#6ee7b7" }}><Money value={b.paidTotal} currency={cur} /></div>
           <span className="tiny faint">{b.payments.filter((p) => p.status === "confirmed").length} confirmed payment(s)</span></Panel>
         <Panel><span className="tiny faint">Remaining balance</span><div className="stat-value"><Money value={b.remaining} currency={cur} /></div>

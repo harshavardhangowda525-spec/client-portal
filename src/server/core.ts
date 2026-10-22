@@ -10,7 +10,7 @@ export function assertAdmin(actor: Actor) {
 
 /**
  * Run privileged statements inside the caller's transaction. Used only after the
- * caller's own access has been verified under RLS (e.g. a client accepting a quotation
+ * caller's own access has been verified under RLS (e.g. a client accepting a proposal
  * they can see). Restores the actor's context afterwards.
  */
 export async function asSystem<T>(tx: Tx, actor: Actor, fn: () => Promise<T>): Promise<T> {

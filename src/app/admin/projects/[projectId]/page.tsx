@@ -29,7 +29,7 @@ export default async function AdminProjectOverview({ params }: { params: Promise
       {p.status === "quotation_accepted" && (
         <section className="glass hero">
           <div style={{ position: "relative", zIndex: 1 }} className="stack">
-            <div><span className="eyebrow">Next step</span><h2>The client accepted the quotation — activate the project</h2>
+            <div><span className="eyebrow">Next step</span><h2>The client accepted the proposal — activate the project</h2>
               <p className="muted small" style={{ marginTop: 4 }}>Confirm the start date and payment terms. This does not mark any payment as received or deploy anything.</p></div>
             {!hasPortalUser && (
               <div className="notice warn row-between">
@@ -44,7 +44,7 @@ export default async function AdminProjectOverview({ params }: { params: Promise
       )}
       {p.status === "proposal" && !hasPortalUser && (
         <div className="notice info row-between">
-          <span>{pendingInvite ? "Invitation sent — waiting for the client to join the portal." : "Invite the client to the portal so they can review and accept the quotation."}</span>
+          <span>{pendingInvite ? "Invitation sent — waiting for the client to join the portal." : "Invite the client to the portal so they can review and accept the proposal."}</span>
           <Link className="btn btn-sm" href={`/admin/clients/${p.client_id}`}>{pendingInvite ? "Manage invitation" : "Invite client"}</Link>
         </div>
       )}

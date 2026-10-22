@@ -32,7 +32,7 @@ async function readSetting<T>(tx: Tx, key: string): Promise<T | null> {
   return r?.value ?? null;
 }
 
-/** Business details shown on proposals, quotations and invoices. Database values override env defaults. */
+/** Business details shown on proposals and invoices. Database values override env defaults. */
 export async function getBusiness(): Promise<Business> {
   return withDb(SYSTEM, async (tx) => {
     const b = (await readSetting<Partial<Business>>(tx, "business")) ?? {};

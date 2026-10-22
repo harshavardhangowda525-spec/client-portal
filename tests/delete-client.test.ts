@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import type { Actor } from "@/lib/db";
-import { makeAdmin, makeClientWithProject, rawSystem } from "./helpers";
+import { makeAdmin, makeClientWithProject, rawSystem, sendProjectProposal, acceptAsClient } from "./helpers";
 import * as C from "@/server/clients";
-import * as Q from "@/server/quotations";
 import * as B from "@/server/billing";
 import * as X from "@/server/content";
 import * as P from "@/server/proposals";
@@ -31,12 +30,10 @@ async function sentProposal(clientId: string) {
 }
 
 describe("deleting clients", () => {
-  it("permanently deletes a client with no signed or financial records, including sent quotations and proposals", async () => {
+  it("permanently deletes a client with no signed or financial records, including sent proposals", async () => {
     const a = await makeClientWithProject(admin, "Gone");
     const other = await makeClientWithProject(admin, "Stays");
-    const { versionId } = await Q.createQuotation(admin, a.projectId, {});
-    await Q.sendQuotation(admin, versionId); // sent but not accepted — normally undeletable
-    await sentProposal(a.clientId);
+    await sentProposal(a.clientId); // sent but not accepted — normally undeletable
     await X.uploadDocument(admin, a.projectId, { name: "logo.png", type: "image/png", data: Buffer.from("x") }, { category: "brand_asset" });
     await X.addComment(a.client, a.projectId, { target_type: "thread", body: "hello" });
     const inv = await B.createInvoice(admin, a.projectId, { title: "Draft", amount: 100 });
@@ -44,7 +41,7 @@ describe("deleting clients", () => {
 
     const im = await C.clientDeletionImpact(admin, a.clientId);
     expect(im.protectedRecords).toEqual([]);
-    expect(im.counts).toMatchObject({ projects: 1, proposals: 1, quotations: 1, invoices: 1, documents: 1, users: 1 });
+    expect(im.counts).toMatchObject({ projects: 1, proposals: 1, invoices: 1, documents: 1, users: 1 });
 
     const r = await C.deleteClient(admin, a.clientId, "  gone bistro ");
     expect(r.result).toBe("deleted");
@@ -70,24 +67,22 @@ describe("deleting clients", () => {
     expect(await count`select count(*) as n from client_profiles where id = ${a.clientId}`).toBe(1);
   });
 
-  it("deletes everything even with an accepted quotation, issued invoice and confirmed payment", async () => {
+  it("deletes everything even with an accepted proposal, issued invoice and confirmed payment", async () => {
     const a = await makeClientWithProject(admin, "Signed");
     const other = await makeClientWithProject(admin, "Neighbour");
-    const { versionId } = await Q.createQuotation(admin, a.projectId, {});
-    await Q.sendQuotation(admin, versionId);
-    const { hash } = await Q.getVersion(a.client, versionId);
-    await Q.acceptQuotation(a.client, versionId, { signer_name: "Signed Owner", confirm_scope: true, confirm_terms: true, content_hash: hash });
+    const { proposalId } = await sendProjectProposal(admin, a.clientId, a.projectId);
+    const versionId = await acceptAsClient(a.client, proposalId, "Signed Owner");
     const inv = await B.createInvoiceFromTerm(admin, a.projectId, 0);
     await B.issueInvoice(admin, inv);
     const pay = await B.recordPayment(admin, a.projectId, { invoice_id: inv, amount: 500, method: "upi", paid_on: "2026-10-01", reference: "UTR1", status: "confirmed" });
 
     const im = await C.clientDeletionImpact(admin, a.clientId);
-    expect(im.protectedRecords).toEqual(["1 accepted quotation", "1 issued invoice", "1 confirmed or refunded payment"]);
+    expect(im.protectedRecords).toEqual(["1 accepted proposal", "1 issued invoice", "1 confirmed or refunded payment"]);
     expect((await C.deleteClient(admin, a.clientId, "Signed Bistro")).result).toBe("deleted");
 
     expect(await count`select count(*) as n from client_profiles where id = ${a.clientId}`).toBe(0);
-    expect(await count`select count(*) as n from quotation_versions where id = ${versionId}`).toBe(0);
-    expect(await count`select count(*) as n from quotation_acceptances where version_id = ${versionId}`).toBe(0);
+    expect(await count`select count(*) as n from proposal_versions where id = ${versionId}`).toBe(0);
+    expect(await count`select count(*) as n from proposal_acceptances where version_id = ${versionId}`).toBe(0);
     expect(await count`select count(*) as n from invoices where id = ${inv}`).toBe(0);
     expect(await count`select count(*) as n from payments where id = ${pay}`).toBe(0);
     expect(await count`select count(*) as n from users where id = ${a.client.userId}`).toBe(0);
@@ -97,9 +92,8 @@ describe("deleting clients", () => {
     expect(log.data.business_name).toBe("Signed Bistro");
     // The immutability protections are back on for everyone else afterwards.
     expect(await count`select count(*) as n from projects where id = ${other.projectId}`).toBe(1);
-    const { versionId: ov } = await Q.createQuotation(admin, other.projectId, {});
-    await Q.sendQuotation(admin, ov);
-    await expect(rawSystem((tx) => tx`delete from quotation_versions where id = ${ov}`)).rejects.toThrow(/Only draft/);
+    const { versionId: ov } = await sendProjectProposal(admin, other.clientId, other.projectId);
+    await expect(rawSystem((tx) => tx`delete from proposal_versions where id = ${ov}`)).rejects.toThrow(/Only unsent/);
   });
 
   it("deletes everything even with an accepted proposal", async () => {

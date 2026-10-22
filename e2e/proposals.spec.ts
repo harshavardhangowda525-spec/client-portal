@@ -151,7 +151,7 @@ test("proposal builder: create, price, send, accept, convert", async ({ browser 
   await expect(admin.getByText("Can we start next Monday?")).toBeVisible();
   await admin.getByRole("button", { name: "Continue" }).click();
   await expect(admin).toHaveURL(/\/admin\/projects\/[0-9a-f-]{36}$/);
-  await expect(admin.getByText(/client accepted the quotation/)).toBeVisible();
+  await expect(admin.getByText(/client accepted the proposal/)).toBeVisible();
   const projectUrl = admin.url();
   await admin.goto(`${projectUrl}/billing`);
   await expect(admin.getByText("₹6,999.00").first()).toBeVisible();

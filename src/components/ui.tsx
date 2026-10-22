@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Icon, type IconName } from "./icons";
-import { MILESTONE_STATUS, PROJECT_STATUS, QUOTE_STATUS, PREVIEW_STATUS, INVOICE_STATUS } from "@/lib/format";
+import { MILESTONE_STATUS, PROJECT_STATUS, PREVIEW_STATUS, INVOICE_STATUS } from "@/lib/format";
 import { formatMoney } from "@/lib/money";
 
 type Tone = "blue" | "green" | "amber" | "red" | "violet" | "";
@@ -18,8 +18,6 @@ export const MilestoneBadge = ({ status }: { status: string }) => (
 const projectTone: Record<string, Tone> = { proposal: "violet", quotation_accepted: "amber", active: "blue", awaiting_client: "amber", on_hold: "", completed: "green", cancelled: "red", declined: "red" };
 export const ProjectBadge = ({ status }: { status: string }) => <Badge tone={projectTone[status]}>{PROJECT_STATUS[status] ?? status}</Badge>;
 
-const quoteTone: Record<string, Tone> = { draft: "", sent: "blue", viewed: "violet", accepted: "green", changes_requested: "amber", rejected: "red", expired: "red", superseded: "", withdrawn: "" };
-export const QuoteBadge = ({ status }: { status: string }) => <Badge tone={quoteTone[status]}>{QUOTE_STATUS[status] ?? status}</Badge>;
 
 const previewTone: Record<string, Tone> = { ready_for_review: "blue", changes_requested: "amber", approved: "green", superseded: "" };
 export const PreviewBadge = ({ status }: { status: string }) => <Badge tone={previewTone[status]}>{PREVIEW_STATUS[status] ?? status}</Badge>;

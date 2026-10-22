@@ -5,7 +5,6 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE, VIEW_AS_COOKIE, VIEW_AS_MINUTES, viewAsValue } from "@/lib/session";
 import * as C from "@/server/clients";
 import * as M from "@/server/milestones";
-import * as Q from "@/server/quotations";
 import * as X from "@/server/content";
 import * as B from "@/server/billing";
 import * as AB from "@/server/app-builds";
@@ -101,54 +100,6 @@ export async function cancelApprovalAction(requestId: string) {
   return run("admin", async (a) => { await M.cancelApprovalRequest(a, requestId); return "Request cancelled."; });
 }
 
-// ---- quotations ----
-export async function createQuotationAction(projectId: string, _: ActionState, fd: FormData): Promise<ActionState> {
-  let qid = "";
-  const r = await run("admin", async (a) => {
-    qid = (await Q.createQuotation(a, projectId, { title: String(fd.get("title") ?? ""), template_id: (fd.get("template_id") as string) || null })).quotationId;
-  });
-  if (r?.ok) redirect(`/admin/projects/${projectId}/quotations/${qid}`);
-  return r;
-}
-export async function saveDraftAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("admin", async (a) => {
-    let payload: unknown;
-    try { payload = JSON.parse(String(fd.get("payload") ?? "{}")); } catch { throw new AppError("Invalid form data."); }
-    await Q.saveDraft(a, versionId, payload);
-    return "Draft saved.";
-  });
-}
-export async function sendQuotationAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("admin", async (a) => {
-    const r = await Q.sendQuotation(a, versionId, { sendEmail: checkbox(fd, "send_email") });
-    const emailed = r.deliveries.filter((d) => d.status === "sent").length;
-    const note = r.recipients === 0
-      ? " The client has no portal account yet — send them a portal invitation so they can review it."
-      : checkbox(fd, "send_email") ? (emailed ? ` Emailed ${emailed} recipient(s).` : " Email is not configured or failed; the client was notified in the portal.") : " The client was notified in the portal.";
-    return `Quotation sent.${note}`;
-  });
-}
-export async function reviseQuotationAction(quotationId: string) {
-  return run("admin", async (a) => { await Q.reviseQuotation(a, quotationId); return "New draft version created."; });
-}
-export async function withdrawVersionAction(versionId: string) {
-  return run("admin", async (a) => { await Q.withdrawVersion(a, versionId); return "Quotation withdrawn."; });
-}
-export async function deleteDraftAction(projectId: string, versionId: string): Promise<ActionState> {
-  return run("admin", async (a) => { await Q.deleteDraft(a, versionId); return "Draft deleted."; });
-}
-export async function saveTemplateAction(templateId: string | null, _: ActionState, fd: FormData) {
-  return run("admin", async (a) => {
-    let content: unknown;
-    try { content = JSON.parse(String(fd.get("content") ?? "{}")); } catch { throw new AppError("Template content must be valid JSON."); }
-    await Q.saveTemplate(a, templateId, { name: String(fd.get("name") ?? ""), description: (fd.get("description") as string) || null, content });
-    return "Template saved.";
-  });
-}
-export async function deleteTemplateAction(templateId: string) {
-  return run("admin", async (a) => { await Q.deleteTemplate(a, templateId); return "Template deleted."; });
-}
-
 // ---- previews, updates, documents ----
 export async function publishPreviewAction(projectId: string, _: ActionState, fd: FormData) {
   return run("admin", async (a) => { await X.publishPreview(a, projectId, form(fd)); return "Preview published and the client was notified."; });
@@ -190,9 +141,6 @@ export async function recordPaymentAction(projectId: string, _: ActionState, fd:
 }
 export async function setPaymentStatusAction(paymentId: string, status: "confirmed" | "failed" | "refunded") {
   return run("admin", async (a) => { await B.setPaymentStatus(a, paymentId, status); return `Payment marked ${status}.`; });
-}
-export async function saveVersionAsTemplateAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("admin", async (a) => { await Q.saveVersionAsTemplate(a, versionId, String(fd.get("name") ?? "")); return "Saved as a reusable template."; });
 }
 
 export async function deleteClientAction(clientId: string, _: ActionState, fd: FormData): Promise<ActionState> {

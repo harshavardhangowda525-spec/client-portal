@@ -2,7 +2,6 @@
 
 import * as X from "@/server/content";
 import * as M from "@/server/milestones";
-import * as Q from "@/server/quotations";
 import * as AB from "@/server/app-builds";
 import { run, form, type ActionState } from "./run";
 import { requestMeta } from "@/lib/session";
@@ -40,27 +39,6 @@ export async function reviewPreviewAction(previewId: string, _: ActionState, fd:
     await X.reviewPreview(a, previewId, form(fd));
     return fd.get("decision") === "approved" ? "Preview approved. Thank you!" : "Your feedback was sent to the team.";
   });
-}
-
-export async function acceptQuotationAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("client", async (a) => {
-    const meta = await requestMeta();
-    await Q.acceptQuotation(a, versionId, {
-      signer_name: String(fd.get("signer_name") ?? ""),
-      confirm_scope: fd.get("confirm_scope") === "on",
-      confirm_terms: fd.get("confirm_terms") === "on",
-      content_hash: String(fd.get("content_hash") ?? ""),
-    }, meta);
-    return "Quotation accepted. Infinity Web & Apps has been notified and will confirm the project start.";
-  });
-}
-
-export async function requestChangesAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("client", async (a) => { await Q.requestQuotationChanges(a, versionId, form(fd)); return "Your change request was sent."; });
-}
-
-export async function rejectQuotationAction(versionId: string, _: ActionState, fd: FormData) {
-  return run("client", async (a) => { await Q.rejectQuotation(a, versionId, form(fd)); return "Quotation declined. The team has been notified."; });
 }
 
 export async function reviewAppBuildAction(buildId: string, _: ActionState, fd: FormData) {

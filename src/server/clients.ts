@@ -99,7 +99,7 @@ export async function createProject(actor: Actor, clientId: string, input: unkno
     const [client] = await tx`select id from client_profiles where id = ${clientId}`;
     if (!client) throw notFound("Client not found.");
     const [p] = await tx<{ id: string }[]>`
-      insert into projects ${tx({ ...d, client_id: clientId, current_stage: "Proposal and quotation" })} returning id`;
+      insert into projects ${tx({ ...d, client_id: clientId, current_stage: "Proposal" })} returning id`;
     if (opts.defaultMilestones !== false) {
       const plan = opts.milestonePlan === "app" ? DEFAULT_APP_MILESTONES : DEFAULT_MILESTONES;
       const rows = plan.map((m, i) => ({ project_id: p.id, position: i + 1, ...m }));
@@ -153,7 +153,7 @@ export async function setProjectStatus(actor: Actor, projectId: string, status: 
 }
 
 /**
- * After the client accepts a quotation, the admin explicitly confirms commencement.
+ * After the client accepts a proposal, the admin explicitly confirms commencement.
  * Nothing is deployed and no payment is marked as received here.
  */
 export async function commenceProject(actor: Actor, projectId: string, input: unknown) {
@@ -165,11 +165,9 @@ export async function commenceProject(actor: Actor, projectId: string, input: un
       throw new AppError("This project has already been activated.");
     }
     const [accepted] = await tx`
-      select 1 from quotation_versions where project_id = ${projectId} and status = 'accepted'
-      union all
       select 1 from proposal_versions v join proposals p on p.id = v.proposal_id where p.project_id = ${projectId} and v.status = 'accepted'
       limit 1`;
-    if (!accepted) throw new AppError("The client must accept a quotation or proposal before the project can commence.");
+    if (!accepted) throw new AppError("The client must accept a proposal before the project can commence.");
     await tx`update projects set status = 'active', commenced_at = now(),
                start_date = coalesce(${d.start_date}, start_date, current_date),
                target_delivery_date = coalesce(${d.target_delivery_date}, target_delivery_date),
@@ -368,7 +366,7 @@ export type DeletionImpact = {
   businessName: string;
   /** Signed or financial records that will also be deleted (shown as an extra warning). */
   protectedRecords: string[];
-  counts: { projects: number; proposals: number; quotations: number; invoices: number; payments: number; documents: number; users: number };
+  counts: { projects: number; proposals: number; invoices: number; payments: number; documents: number; users: number };
 };
 
 async function impact(tx: Tx, clientId: string): Promise<DeletionImpact> {
@@ -378,24 +376,21 @@ async function impact(tx: Tx, clientId: string): Promise<DeletionImpact> {
     select
       (select count(*)::int from projects where client_id = ${clientId}) as projects,
       (select count(*)::int from proposals where client_id = ${clientId}) as proposals,
-      (select count(*)::int from quotations q join projects p on p.id = q.project_id where p.client_id = ${clientId}) as quotations,
       (select count(*)::int from invoices i join projects p on p.id = i.project_id where p.client_id = ${clientId}) as invoices,
       (select count(*)::int from payments x join projects p on p.id = x.project_id where p.client_id = ${clientId}) as payments,
       (select count(*)::int from documents d join projects p on p.id = d.project_id where p.client_id = ${clientId}) as documents,
       (select count(*)::int from users where client_id = ${clientId}) as users,
-      (select count(*)::int from quotation_versions v join projects p on p.id = v.project_id where p.client_id = ${clientId} and v.accepted_at is not null) as accepted_quotes,
       (select count(*)::int from proposal_versions where client_id = ${clientId} and accepted_at is not null) as accepted_proposals,
       (select count(*)::int from invoices i join projects p on p.id = i.project_id where p.client_id = ${clientId} and i.status not in ('draft', 'void')) as issued_invoices,
       (select count(*)::int from payments x join projects p on p.id = x.project_id where p.client_id = ${clientId} and x.status in ('confirmed', 'refunded')) as confirmed_payments`;
   const protectedRecords = [
-    n.accepted_quotes ? `${n.accepted_quotes} accepted quotation${n.accepted_quotes > 1 ? "s" : ""}` : "",
     n.accepted_proposals ? `${n.accepted_proposals} accepted proposal${n.accepted_proposals > 1 ? "s" : ""}` : "",
     n.issued_invoices ? `${n.issued_invoices} issued invoice${n.issued_invoices > 1 ? "s" : ""}` : "",
     n.confirmed_payments ? `${n.confirmed_payments} confirmed or refunded payment${n.confirmed_payments > 1 ? "s" : ""}` : "",
   ].filter(Boolean);
   return {
     businessName: c.business_name, protectedRecords,
-    counts: { projects: n.projects, proposals: n.proposals, quotations: n.quotations, invoices: n.invoices, payments: n.payments, documents: n.documents, users: n.users },
+    counts: { projects: n.projects, proposals: n.proposals, invoices: n.invoices, payments: n.payments, documents: n.documents, users: n.users },
   };
 }
 
@@ -405,7 +400,7 @@ export async function clientDeletionImpact(actor: Actor, clientId: string) {
 }
 
 /**
- * Permanently delete a client and everything belonging to them — projects, proposals, quotations
+ * Permanently delete a client and everything belonging to them — projects, proposals
  * (including accepted ones), invoices, payments, documents, messages, invitations and portal logins.
  * The admin must type the business name to confirm. Only an audit entry recording the deletion remains.
  */
@@ -446,5 +441,13 @@ export async function viewAsTarget(actor: Actor, clientId: string, preferProject
       order by (p.id::text = ${preferProjectId ?? ""}) desc, p.created_at desc limit 1`;
     await audit(tx, actor, "client.viewed_as", "client", clientId, p?.id ?? null, { user: u.name, business: c.business_name });
     return { userId: u.id, projectId: p?.id ?? null };
+  });
+}
+
+export async function getProjectSummary(actor: Actor, projectId: string) {
+  assertAdmin(actor);
+  return withDb(actor, async (tx) => {
+    const p = await getProjectFor(tx, actor, projectId);
+    return { id: p.id, name: p.name, client_id: p.client_id, project_type: p.project_type, description: (p as { description?: string | null }).description ?? null };
   });
 }

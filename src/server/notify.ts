@@ -14,7 +14,7 @@ async function elevated<T>(tx: Tx, actor: Actor | null, fn: () => Promise<T>) {
   return actor && actor.role === "client" ? asSystem(tx, actor, fn) : fn();
 }
 
-/** Notify all active admins (e.g. client accepted a quotation or submitted feedback). */
+/** Notify all active admins (e.g. client accepted a proposal or submitted feedback). */
 export async function notifyAdmins(tx: Tx, actor: Actor | null, n: Note) {
   await elevated(tx, actor, async () => {
     const admins = await tx<{ id: string }[]>`select id from users where role = 'admin' and disabled_at is null`;

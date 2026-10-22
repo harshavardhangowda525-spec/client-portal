@@ -1,6 +1,6 @@
 # Infinity Web & Apps — Client Project Portal
 
-A private client portal and admin dashboard for Infinity Web & Apps. Clients review and accept quotations, follow milestones, review website previews, see invoices and payments, exchange messages and download documents. You manage everything from `/admin`.
+A private client portal and admin dashboard for Infinity Web & Apps. Clients review and accept proposals, follow milestones, review website previews, see invoices and payments, exchange messages and download documents. You manage everything from `/admin`.
 
 **Stack:** Next.js 15 (App Router, server actions) · PostgreSQL with forced Row Level Security · `postgres` driver · Zod validation · pdf-lib PDFs · optional SMTP / WhatsApp Cloud API / Razorpay.
 
@@ -16,17 +16,17 @@ A private client portal and admin dashboard for Infinity Web & Apps. Clients rev
 | Authenticated file / PDF / Razorpay endpoints | `src/app/api/…` |
 
 ### Security model
-- **Authorization runs in two layers.** Service functions check the actor's role and project access. Every query also runs in a transaction that sets `app.role` / `app.user_id`, so Postgres RLS policies, forced even for the table owner, enforce the same rules. A client can only read rows for projects they are a member of. Drafts, internal updates, internal documents, internal notes, unconfirmed payments and admin quotation notes are never visible to clients.
+- **Authorization runs in two layers.** Service functions check the actor's role and project access. Every query also runs in a transaction that sets `app.role` / `app.user_id`, so Postgres RLS policies, forced even for the table owner, enforce the same rules. A client can only read rows for projects they are a member of. Drafts, internal updates, internal documents, internal notes, unconfirmed payments and proposal internal notes and provider costs are never visible to clients.
 - **Sessions:** a random 256-bit token is kept in an `httpOnly`, `SameSite=Lax` cookie and stored only as a SHA-256 hash. Sessions expire after 14 days and can be revoked. Revoking a client's portal access ends their sessions immediately.
 - **Logins** are rate-limited per email and per IP. Passwords are hashed with scrypt.
 - **Invitations** use single-use, expiring (7-day) random tokens, stored only as hashes. Resending issues a new link and invalidates the old one.
-- **Quotations:**
-  - Accepting requires explicit confirmation of the scope and terms plus a typed signature.
+- **Proposals:**
+  - Accepting requires explicit confirmation of the scope, the one-time total and payment schedule, and recurring costs, plus a typed signature.
   - The record captures the user, timestamp, IP, version number, a SHA-256 fingerprint of the exact content and a full snapshot of the terms.
   - Database triggers make accepted versions and acceptance records immutable. Changes always create a new version.
 - **Payments** are never marked as received automatically. Manual payments are recorded by an admin, as pending or confirmed. Online (Razorpay) payments are recorded only after the server verifies the signature and checks with Razorpay that the payment was captured for the right order and amount. The database enforces this with a CHECK constraint.
 - **Files** are stored privately in Postgres (max 15 MB each) and served only through authenticated routes with `nosniff`. Downloads are sandboxed, except PDFs, which the browser viewer needs.
-- **Audit log:** append-only, covering quotation, financial, access and project events.
+- **Audit log:** append-only, covering proposal, financial, access and project events.
 
 ## Proposal builder
 
@@ -74,7 +74,7 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
-For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql`, `005_app_builds.sql` and `006_ai_services.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` through `007_remove_quotations.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
 
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
@@ -92,24 +92,24 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 111 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 105 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
-- the full workflow: client → quotation → revision → acceptance → commencement → milestones → preview feedback → invoice → payment → handover
+- the full workflow: client → proposal → acceptance → commencement → milestones → preview feedback → invoice → payment → handover
 - isolation between clients, at both the service and raw-SQL (RLS) level
 - invitation abuse cases
 - lockout after repeated failed logins
-- immutability of accepted quotations and the audit log
+- immutability of accepted proposals and the audit log
 - rules that stop payments being marked paid without confirmation
 - sample-data removal
 
 ## Deleting clients
 Each client page has a **Delete client** section, also reachable from the trash icon in the Clients list. You confirm by typing the business name.
 
-Deleting permanently removes the client and **all** of their data: projects, proposals, quotations (including accepted ones and their acceptance records), invoices, payments, documents, messages, invitations and portal logins. The client is signed out immediately, and this cannot be undone.
+Deleting permanently removes the client and **all** of their data: projects, proposals (including accepted ones and their acceptance records), invoices, payments, documents, messages, invitations and portal logins. The client is signed out immediately, and this cannot be undone.
 
-If the client has accepted quotations or proposals, issued invoices or confirmed payments, you get an extra warning. Download any PDFs you need for your accounts first.
+If the client has accepted proposals, issued invoices or confirmed payments, you get an extra warning. Download any PDFs you need for your accounts first.
 
 Only an audit-log entry remains, recording who deleted which client and when.
 
@@ -144,7 +144,7 @@ Approved builds can't be deleted. Deleting a client removes all their builds.
 
 **View as client** is on every client page and project page. It opens the real portal exactly as that client sees it, with a banner across the top and an **Exit client view** button.
 - **Read-only, no trace.**
-  - Every database transaction in this mode runs with the client's own permissions and is then rolled back. Even things a page normally records, like "quotation viewed" or "messages read", are never saved.
+  - Every database transaction in this mode runs with the client's own permissions and is then rolled back. Even things a page normally records, like "proposal viewed" or "messages read", are never saved.
   - Every action (sending a message, approving, paying, changing settings) is refused.
 - **Session.**
   - The view lasts 60 minutes. It is tied to your admin session through an HMAC-signed, `httpOnly` cookie that only applies to `/portal` pages, so admin pages in other tabs keep working as you.
@@ -163,7 +163,7 @@ Every link the portal sends (invitations, emails, notifications) is built from `
 
 **Admin → Maintenance** tracks the free maintenance period for every project. Configure it in **Settings → Maintenance & payments**.
 
-- **When it starts.** By default, the period starts when the first proposal or quotation is created for the project. You can switch this to "proposal accepted" or "project delivered". It lasts 6 calendar months by default; month ends are clamped, so 31 Aug runs to 28/29 Feb. All dates are in India time (IST). You can override the dates per project.
+- **When it starts.** By default, the period starts when the first proposal is created for the project. You can switch this to "proposal accepted" or "project delivered". It lasts 6 calendar months by default; month ends are clamped, so 31 Aug runs to 28/29 Feb. All dates are in India time (IST). You can override the dates per project.
 - **Statuses:** free maintenance, expiring soon (≤ 30 days), free period expired, awaiting client, paid maintenance, payment overdue, cancelled. Projects can also be marked exempt or paused.
 - **Notifications** go out by email and WhatsApp, to the client and to you:
   - reminders 30 and 7 days before expiry
@@ -193,10 +193,14 @@ Every link the portal sends (invitations, emails, notifications) is built from `
 ## Workflow
 
 1. **Admin → Clients → New client.** Then create the project. The standard 14-step website milestone plan with weights is optional, and you can edit, reorder or delete milestones.
-2. **Quotations tab:** create a draft from a template, then edit line items, discount, tax, payment milestones, inclusions, exclusions and terms. Download a PDF preview.
+2. **Proposal tab → Create proposal for this project.** The proposal builder opens for that client and project. Price it, set the payment milestones, then send it. Proposals created this way link to the project automatically.
 3. **Client page → Create invitation link.** If email is configured it is sent; otherwise copy the link, or use **Open in WhatsApp** for a pre-filled chat.
-4. **Send the quotation.** The client signs in, reviews it, and accepts, requests changes or declines. Requested changes lead to **Create revised version**.
-5. When a quotation is accepted you are notified, and the project overview shows **Confirm commencement & payment terms**, with a reminder to invite the client if they haven't joined yet.
+4. **The client reviews the proposal** (Portal → their project → Proposal, or "Needs your attention"). They accept it, ask questions, request changes or decline. Requested changes lead to **Create revised version**.
+5. When the proposal is accepted you are notified, and the project overview shows **Confirm commencement & payment terms**, with a reminder to invite the client if they haven't joined yet. The accepted proposal now drives **Invoices & payments**:
+   - the project total
+   - confirmed payments received
+   - the remaining balance
+   - the payment schedule, with **Create invoice** for each milestone
 6. Day-to-day work:
    - update milestones (progress is the weighted share of completed milestones)
    - publish preview URLs
@@ -219,7 +223,7 @@ Before using the portal with a real client:
 - [ ] Set `APP_URL` to the public HTTPS URL (it is used in invitation links) and `COOKIE_SECURE=true`.
 - [ ] Create your admin account with `npm run admin:create`, using a strong unique password. If the host has no shell, set a long random `ADMIN_SETUP_TOKEN` once, visit `/setup`, then **remove the variable**. The page disables itself as soon as an admin exists.
 - [ ] Set the company details printed on PDFs: `COMPANY_NAME`, `COMPANY_EMAIL`, `COMPANY_PHONE`, `COMPANY_ADDRESS`, `COMPANY_TAX_ID` (GSTIN, if registered).
-- [ ] Review the default quotation template (**Admin → Quotation templates**). Prices, terms and tax rate are placeholders, and tax defaults to 0%.
+- [ ] Review **Settings → Pricing configuration** (packages, services, terms, tax). Tax defaults to 0%.
 - [ ] Don't seed sample data in production, or run `npm run sample:remove` if you did. Settings shows how many sample clients exist.
 - [ ] Set up daily database backups with your provider.
 

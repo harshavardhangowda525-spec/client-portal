@@ -12,7 +12,7 @@ export function DangerZone({ clientId, im }: { clientId: string; im: DeletionImp
   const c = im.counts;
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const parts = [
-    c.projects && plural(c.projects, "project"), c.proposals && plural(c.proposals, "proposal"), c.quotations && plural(c.quotations, "quotation"),
+    c.projects && plural(c.projects, "project"), c.proposals && plural(c.proposals, "proposal"),
     c.invoices && plural(c.invoices, "invoice"), c.payments && plural(c.payments, "payment record"), c.documents && plural(c.documents, "document"),
     c.users && plural(c.users, "portal login"),
   ].filter(Boolean);
@@ -24,7 +24,7 @@ export function DangerZone({ clientId, im }: { clientId: string; im: DeletionImp
       </div>
       {im.protectedRecords.length > 0 && (
         <div className="notice warn small">
-          <strong>This also deletes {im.protectedRecords.join(", ")}.</strong> Download any quotation, invoice or receipt PDFs you need for your accounts before deleting.
+          <strong>This also deletes {im.protectedRecords.join(", ")}.</strong> Download any proposal, invoice or receipt PDFs you need for your accounts before deleting.
         </div>
       )}
       <ActionForm action={deleteClientAction.bind(null, clientId)} className="stack-sm">

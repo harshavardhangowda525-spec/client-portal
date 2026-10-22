@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest
 import { SMTPServer } from "smtp-server";
 import type { AddressInfo } from "node:net";
 import type { Actor } from "@/lib/db";
-import { makeAdmin, makeClientWithProject, rawAs, rawSystem } from "./helpers";
-import * as Q from "@/server/quotations";
+import { makeAdmin, makeClientWithProject, rawAs, rawSystem, proposalInput } from "./helpers";
+import * as P from "@/server/proposals";
 import * as B from "@/server/billing";
 import * as MT from "@/server/maintenance";
 import { addDays, addMonths, istDate, istToday, daysBetween } from "@/lib/dates";
@@ -64,12 +64,12 @@ describe("maintenance expiry & billing", () => {
   });
 
   it("1–2. the free period starts when the proposal is initiated and lasts six calendar months (IST)", async () => {
-    const { projectId } = await makeClientWithProject(admin, "Start");
+    const { projectId, clientId } = await makeClientWithProject(admin, "Start");
     await MT.runMaintenanceJob();
     expect((await project(projectId)).free_maintenance_start_date).toBeNull(); // no proposal yet
-    await Q.createQuotation(admin, projectId, { title: "Website" });
+    await P.saveProposal(admin, null, await proposalInput(admin, clientId, { project_id: projectId }));
     // Proposal initiated at 20:00 UTC on 31 Aug = 1 Sep in India.
-    await rawSystem((tx) => tx`update quotations set created_at = '2026-08-31T20:00:00Z' where project_id = ${projectId}`);
+    await rawSystem((tx) => tx`update proposals set created_at = '2026-08-31T20:00:00Z' where project_id = ${projectId}`);
     await MT.runMaintenanceJob();
     const p = await project(projectId);
     expect(istDate(p.proposal_started_at)).toBe("2026-09-01");
@@ -86,8 +86,8 @@ describe("maintenance expiry & billing", () => {
   });
 
   it("the start trigger is configurable (proposal accepted / project delivered)", async () => {
-    const { projectId } = await makeClientWithProject(admin, "Trigger");
-    await Q.createQuotation(admin, projectId, { title: "Website" });
+    const { projectId, clientId } = await makeClientWithProject(admin, "Trigger");
+    await P.saveProposal(admin, null, await proposalInput(admin, clientId, { project_id: projectId }));
     const s = await MT.getMaintenanceSettings();
     await MT.saveMaintenanceSettings(admin, { ...s, trigger: "project_delivered" });
     await MT.runMaintenanceJob();

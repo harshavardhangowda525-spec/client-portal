@@ -171,7 +171,7 @@ export async function listUpdates(actor: Actor, projectId: string) {
 }
 
 const commentSchema = z.object({
-  target_type: z.enum(["thread", "update", "preview", "milestone", "quotation", "app_build"]),
+  target_type: z.enum(["thread", "update", "preview", "milestone", "app_build"]),
   target_id: optUuid,
   body: text(10000),
 });
@@ -182,7 +182,7 @@ export async function addComment(actor: Actor, projectId: string, input: unknown
   return withDb(actor, async (tx) => {
     await getProjectFor(tx, actor, projectId);
     if (d.target_type !== "thread") {
-      const table = { update: tx`project_updates`, preview: tx`previews`, milestone: tx`milestones`, quotation: tx`quotations`, app_build: tx`app_builds` }[d.target_type];
+      const table = { update: tx`project_updates`, preview: tx`previews`, milestone: tx`milestones`, app_build: tx`app_builds` }[d.target_type];
       // Under RLS a client cannot see (and therefore cannot comment on) internal targets.
       const [ok] = await tx`select 1 from ${table} where id = ${d.target_id} and project_id = ${projectId}`;
       if (!ok) throw notFound("The item you are commenting on was not found.");

@@ -16,6 +16,7 @@ export type WizardState = {
   client: { mode: "existing"; client_id: string } | { mode: "new"; business_name: string; owner_name: string; email: string; phone: string | null; business_category: string | null };
   contact: { name: string; email: string; phone: string | null };
   business_category: string | null;
+  project_id?: string | null;
   title: string; project_type: string; description: string | null; requirements: string | null; target_launch_date: string | null;
   assigned_to: string | null; internal_notes: string | null; executive_summary: string | null; recommended_solution: string | null;
   pricing: { mode: "package" | "itemized"; package_ids: string[]; addons: Addon[]; custom: Custom[] };
