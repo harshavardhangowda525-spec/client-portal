@@ -136,3 +136,14 @@ export const MaintenanceBadge = ({ status }: { status: string | null }) =>
   status ? <Badge tone={maintenanceTone[status]}>{MAINTENANCE_STATUS[status] ?? status}</Badge> : <Badge plain>Not started</Badge>;
 export const DeliveryBadge = ({ status }: { status: string | null }) =>
   status ? <Badge tone={status === "sent" ? "green" : status === "failed" ? "red" : "amber"}>{status.replace("_", " ")}</Badge> : <span className="faint small">—</span>;
+
+export const RESOLVE_STATUS: Record<string, string> = {
+  new: "New", ai_clarification: "AI clarification", awaiting_client: "Awaiting your reply", awaiting_admin_review: "Awaiting review",
+  approved: "Approved", in_progress: "In progress", awaiting_client_verification: "Please verify", resolved: "Resolved", closed: "Closed",
+};
+const resolveTone: Record<string, Tone> = { new: "violet", ai_clarification: "blue", awaiting_client: "amber", awaiting_admin_review: "violet", approved: "blue",
+  in_progress: "blue", awaiting_client_verification: "amber", resolved: "green", closed: "" };
+export const ResolveStatusBadge = ({ status, admin }: { status: string; admin?: boolean }) =>
+  <Badge tone={resolveTone[status]}>{admin && status === "awaiting_client" ? "Awaiting client" : admin && status === "awaiting_client_verification" ? "Awaiting client verification" : RESOLVE_STATUS[status] ?? status}</Badge>;
+const priorityTone: Record<string, Tone> = { low: "", normal: "blue", high: "amber", critical: "red" };
+export const PriorityBadge = ({ priority }: { priority: string }) => <Badge tone={priorityTone[priority]} plain={priority === "low"}>{priority}</Badge>;

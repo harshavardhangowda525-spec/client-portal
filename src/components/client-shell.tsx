@@ -32,6 +32,7 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
         { href: `${base}/payments`, label: "Invoices & payments", icon: "wallet" },
         { href: `${base}/maintenance`, label: "Maintenance & billing", icon: "wrench" },
         { href: `${base}/updates`, label: "Updates", icon: "activity" },
+        { href: `${base}/resolve`, label: "Infinity Resolve", icon: "sparkle" },
         { href: `${base}/messages`, label: "Messages", icon: "chat", count: unreadMsgs },
         { href: `${base}/documents`, label: "Documents", icon: "folder" },
       ],

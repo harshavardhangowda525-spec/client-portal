@@ -33,7 +33,10 @@ export default async function PreviewPage({ params, searchParams }: { params: Pr
     <>
       <PageHead eyebrow="Website preview" title={current.title || `Preview version ${current.version_no}`}
         sub={<>Version {current.version_no} · published {fmtDate(current.published_at)} · <PreviewBadge status={current.status} /></>}
-        actions={<a className="btn btn-primary" href={current.url} target="_blank" rel="noopener noreferrer"><Icon name="external" /> Open in new tab</a>} />
+        actions={<>
+          <Link className="btn" href={`/portal/${projectId}/resolve?tab=visual&preview=${current.id}`}><Icon name="pen" /> Give visual feedback</Link>
+          <a className="btn btn-primary" href={current.url} target="_blank" rel="noopener noreferrer"><Icon name="external" /> Open in new tab</a>
+        </>} />
       <PreviewViewer url={current.url} embedBlocked={current.embed_blocked} />
       <div className="grid grid-main section" style={{ alignItems: "start" }}>
         <div className="stack">
