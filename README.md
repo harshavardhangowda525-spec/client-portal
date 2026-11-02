@@ -74,7 +74,7 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
-For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` through `007_remove_quotations.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` through `008_infinity_resolve.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
 
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
@@ -92,7 +92,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 105 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 125 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
@@ -139,6 +139,70 @@ You can also add up to 8 screenshots and release notes. The client gets a portal
 - version history and a comment thread
 
 Approved builds can't be deleted. Deleting a client removes all their builds.
+
+## Infinity Resolve (AI requests, tickets, gaps and briefings)
+
+**Clients** get **Infinity Resolve** in their project menu, with these tabs:
+- **Ask AI Assistant:** type a request (with optional screenshots).
+- **Record Voice Request:** record up to 3 minutes in English or an Indian language, then correct the transcript before sending.
+- **Visual Feedback:** capture or upload a screenshot of the preview and mark it up with boxes, arrows, drawing and numbered pins. Also reachable from **Website preview → Give visual feedback**.
+- **My Requests**
+- **Awaiting your reply**
+
+**How a request flows:**
+1. **Clarification.** The assistant (Groq) classifies the request and checks it against this project only: milestones, latest preview and the accepted proposal's scope. It asks one targeted question at a time, then shows a summary.
+2. **Confirmation.** Only the client's confirmation turns the conversation into a reviewed ticket. Confirming twice does nothing, and an identical requirement within 7 days is linked as a duplicate.
+3. **Guardrails.**
+   - The assistant cannot take actions.
+   - Client text is passed as data, not instructions.
+   - Replies that promise prices, free work, refunds or deadlines are blocked server-side and logged as "guarded".
+4. **If the AI is unavailable,** nothing is lost. The request goes to you as **New**, with the client's exact words, and you are still briefed.
+
+**Admin → Infinity Resolve** has these tabs:
+- All requests (search and filters)
+- AI conversation summaries
+- Communication gaps
+- Pending approvals
+- My action items
+- Developer tasks (grouped by assignee)
+- Email briefings (view, resend, send today's summary)
+- AI activity (every AI call, with model, result, latency and output)
+- Settings
+
+On a ticket you can:
+- assign it, change status, priority, scope or category, and set a target date
+- reply to the client or add internal notes (never shown to clients)
+- manage its action items and gaps
+
+Only the client can mark a fix as verified. The assistant never resolves tickets.
+
+**Ticket statuses:** New → AI clarification ↔ Awaiting client response → Awaiting administrator review → Approved → In progress → Awaiting client verification → Resolved → Closed.
+
+**Communication gaps:**
+- **Detected daily:** unanswered client messages (tickets and project Messages), stalled approvals, approved tickets without an owner, clients not answering, overdue target dates, unverified fixes, and pending client approvals.
+- **Detected when a request is confirmed:** missing details, contradictions or changed instructions (AI compares with the project's earlier requests), scope conflicts, repeated complaints and duplicates.
+- **What a gap does:** creates an action item and notifies the assignee (or all admins). It clears automatically when the condition no longer applies.
+- Nothing changes scope, deadlines or proposals.
+
+**Email briefings** go through your existing SMTP and are logged in *Email briefings* and *Settings → Recent message deliveries*:
+- **Per-ticket briefing:** sent once when the client confirms, with 11 sections. Its task list becomes **My Action Items**.
+- **Urgent alerts:** critical issues, serious complaints, repeated issues, major scope conflicts, and high-priority approvals. Each ticket alerts once, and alerts are limited per hour.
+- **Daily summary:** sent at 8 PM IST by the daily job (`/api/cron/resolve`, Vercel Cron `30 14 * * *`, `CRON_SECRET`), grouped by client and project.
+
+Failed emails are retried up to 3 times. Links in emails open the admin dashboard and carry no tokens.
+
+**Files and privacy:**
+- Screenshots and voice notes are private documents. Uploads are limited to 4 MB because of Vercel's request limit, and images are checked to be real PNG, JPEG or WebP files.
+- Voice recordings are kept only if the client ticks the consent box, and are deleted after 30 days (configurable).
+- Clients are rate-limited per hour and per day.
+- All tables use the same forced row-level security. Clients see only their own projects' tickets and client-visible messages; action items, gaps, briefings and AI logs are admin-only.
+
+**Setup:** set `GROQ_API_KEY` (from console.groq.com) and the administrator email in **Admin → Infinity Resolve → Settings**. Email uses your existing SMTP; the daily job uses `CRON_SECRET`.
+- **Changing the daily summary time:** edit the `/api/cron/resolve` schedule in `vercel.json`. The job sends the summary on its first run at or after the hour set in Settings.
+- **Limits:**
+  - Clicking individual elements inside the preview isn't possible because previews are hosted on another site, so visual feedback uses screenshots.
+  - Pages refresh every few seconds, not instantly.
+- **Tests:** `npm test` covers the service with a mocked Groq API and a local SMTP server. For browser tests, run `node e2e/mock-groq.mjs`, start the app with `GROQ_BASE_URL=http://127.0.0.1:4010 GROQ_API_KEY=test`, then run `E2E_GROQ_MOCK=1 npm run test:e2e`.
 
 ## View as client
 
@@ -234,4 +298,4 @@ Before using the portal with a real client:
 - [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Scan the QR preview with your phone to verify it, but don't pay.
 - [ ] **Razorpay:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Test with test-mode keys first. For the webhook, set `RAZORPAY_WEBHOOK_SECRET` and point a Razorpay webhook (events `payment.captured`, `order.paid`) at `https://<your-domain>/api/razorpay/webhook`.
 
-**Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`. All of them are read only on the server.
+**Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`, `GROQ_API_KEY`. All of them are read only on the server.

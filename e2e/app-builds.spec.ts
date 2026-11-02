@@ -91,6 +91,7 @@ test("app build review through the client portal", async ({ browser }) => {
   await expect(client.getByText(/Tested on: Redmi Note 12/)).toBeVisible();
 
   await admin.reload();
+  await admin.waitForLoadState("networkidle"); // the publish form must be hydrated before it is submitted
   await expect(admin.getByText(/Sign-up button does nothing/)).toBeVisible();
   await expect(admin.getByRole("link", { name: /Client screenshot/ })).toBeVisible();
   await admin.getByLabel("Android link").fill("https://drive.google.com/file/d/xyz/view");

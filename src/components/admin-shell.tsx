@@ -5,10 +5,11 @@ import { initials } from "./ui";
 import { Icon } from "./icons";
 import { logoutAction } from "@/app/actions/auth";
 import { unreadNotificationCount } from "@/server/content";
+import { openActionCount } from "@/server/resolve";
 import type { Actor } from "@/lib/db";
 
 export async function AdminShell({ actor, children }: { actor: Actor; children: ReactNode }) {
-  const unread = await unreadNotificationCount(actor);
+  const [unread, resolveCount] = await Promise.all([unreadNotificationCount(actor), openActionCount(actor)]);
   return (
     <Shell
       groups={[
@@ -18,6 +19,7 @@ export async function AdminShell({ actor, children }: { actor: Actor; children: 
           { href: "/admin/projects", label: "Projects", icon: "briefcase" },
           { href: "/admin/clients", label: "Clients", icon: "users" },
           { href: "/admin/maintenance", label: "Maintenance", icon: "wrench" },
+          { href: "/admin/resolve", label: "Infinity Resolve", icon: "sparkle", count: resolveCount },
         ] },
         { label: "Account", items: [
           { href: "/admin/notifications", label: "Notifications", icon: "bell", count: unread },
