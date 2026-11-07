@@ -20,6 +20,7 @@ export async function AdminShell({ actor, children }: { actor: Actor; children: 
           { href: "/admin/clients", label: "Clients", icon: "users" },
           { href: "/admin/maintenance", label: "Maintenance", icon: "wrench" },
           { href: "/admin/resolve", label: "Infinity Resolve", icon: "sparkle", count: resolveCount },
+          { href: "/admin/referrals", label: "Referrals & leads", icon: "users" },
         ] },
         { label: "Account", items: [
           { href: "/admin/notifications", label: "Notifications", icon: "bell", count: unread },

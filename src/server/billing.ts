@@ -183,6 +183,7 @@ export async function recordPayment(actor: Actor, projectId: string, input: unkn
     return p.id;
   });
   await onPaymentStatusChanged(id);
+  await referralPaymentHook(id);
   return id;
 }
 
@@ -212,6 +213,7 @@ export async function setPaymentStatus(actor: Actor, paymentId: string, status: 
     if (status === "confirmed") await paymentConfirmedNotice(tx, actor, p.project_id, Number(p.amount));
   });
   await onPaymentStatusChanged(paymentId);
+  await referralPaymentHook(paymentId);
 }
 
 export async function getInvoice(actor: Actor, invoiceId: string) {
@@ -257,4 +259,9 @@ export async function recordVerifiedOnlinePayment(tx: Tx, args: {
   await audit(tx, null, "payment.verified_online", "payment", p.id, args.projectId, { amount: args.amount, order: args.orderId, payment: args.paymentId, method: args.method });
   await paymentConfirmedNotice(tx, null, args.projectId, args.amount);
   return p.id;
+}
+
+/** Referral conversion follows verified payments; a failure here never blocks recording a payment. */
+async function referralPaymentHook(paymentId: string) {
+  try { await (await import("./referrals")).onPaymentChanged(paymentId); } catch (e) { console.error("[referral payment hook]", e); }
 }
