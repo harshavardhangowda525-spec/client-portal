@@ -5,6 +5,7 @@ import { Badge, Empty, MilestoneBadge, Panel, ProgressRing, ProjectBadge } from 
 import { Icon } from "@/components/icons";
 import { fmtDate, PROJECT_TYPES, timeAgo, UPDATE_KINDS } from "@/lib/format";
 import { ApprovalResponse } from "./approval-response";
+import { getFeedbackRequest } from "@/server/referrals";
 
 export const metadata = { title: "Overview" };
 
@@ -16,8 +17,9 @@ function greeting() {
 export default async function Overview({ params }: { params: Promise<{ projectId: string }> }) {
   const actor = await requireClient();
   const { projectId } = await params;
-  const o = await projectOverview(actor, projectId);
+  const [o, fbReq] = await Promise.all([projectOverview(actor, projectId), getFeedbackRequest(actor, projectId).catch(() => null)]);
   const base = `/portal/${projectId}`;
+  const askFeedback = fbReq?.workflow?.status === "awaiting_feedback" && !fbReq.feedback;
   const previewReady = o.latestPreview && o.latestPreview.status !== "superseded";
   const stage = o.project.current_stage ?? o.current?.title ?? "Getting started";
 
@@ -50,6 +52,12 @@ export default async function Overview({ params }: { params: Promise<{ projectId
       {o.project.status === "on_hold" && <div className="notice warn">This project is currently on hold. We will update you when work resumes.</div>}
       {o.project.status === "awaiting_client" && <div className="notice warn">We are waiting for your input before we can continue. Please check the actions below.</div>}
 
+      {askFeedback && (
+        <section className="glass panel row-between" style={{ flexWrap: "wrap", gap: 12, borderColor: "rgba(61,139,255,.4)" }}>
+          <div><strong>Your project is complete!</strong><div className="small muted">We&apos;d love to hear about your experience with Infinity Web &amp; Apps. It takes about a minute.</div></div>
+          <Link href={`${base}/feedback`} className="btn btn-primary">Share feedback</Link>
+        </section>
+      )}
       {o.pendingActions.length > 0 && (
         <Panel title={<><Icon name="alert" style={{ color: "var(--amber)" }} /> Needs your attention</>} sub="These items are waiting on you.">
           <div className="list">

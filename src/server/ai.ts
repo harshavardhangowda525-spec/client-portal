@@ -9,7 +9,7 @@ export const aiModel = () => process.env.GROQ_MODEL || "llama-3.3-70b-versatile"
 export const transcribeModel = () => process.env.GROQ_TRANSCRIBE_MODEL || "whisper-large-v3";
 export const aiConfigured = () => !!process.env.GROQ_API_KEY;
 
-export type AiOperation = "clarify" | "transcribe" | "briefing" | "gap_check" | "daily_summary";
+export type AiOperation = "clarify" | "transcribe" | "briefing" | "gap_check" | "daily_summary" | "feedback_summary" | "lead_qualify" | "follow_up_draft" | "referral_insights";
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 export type AiResult<T> = { ok: true; data: T } | { ok: false; status: "failed" | "not_configured"; error: string };
 

@@ -18,7 +18,10 @@ export async function GET(req: Request) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const summary = await runMaintenanceJob({ trigger: "cron" });
-    return NextResponse.json({ ok: summary.errors.length === 0, summary });
+    // The same daily run also handles referral reminders and follow-ups (keeps within Vercel's cron limits).
+    let referrals: unknown = null;
+    try { referrals = await (await import("@/server/referral-jobs")).runReferralJob(); } catch (e) { console.error("[cron referrals]", e); referrals = { error: "failed" }; }
+    return NextResponse.json({ ok: summary.errors.length === 0, summary, referrals });
   } catch (e) {
     console.error("[cron maintenance]", e);
     return NextResponse.json({ ok: false, error: "Maintenance check failed" }, { status: 500 });

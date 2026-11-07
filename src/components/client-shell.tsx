@@ -42,6 +42,7 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
     label: "Account",
     items: [
       { href: "/portal/proposals", label: "Proposals", icon: "file", count: awaiting },
+      { href: "/portal/referrals", label: "My Referrals", icon: "users" },
       ...(pid ? [
         { href: `/portal/${pid}/notifications`, label: "Notifications", icon: "bell" as const, count: unreadNotes },
         { href: `/portal/${pid}/account`, label: "Account", icon: "settings" as const },

@@ -411,3 +411,15 @@ dialog.modal[open] { animation: page-in 0.3s var(--ease); }
 @media (max-width: 640px) { .table-cards tr.incl-row td { display: block; } }
 .danger-panel { border-color: rgba(248, 113, 113, 0.25); }
 .spacer { flex: 1; }
+.chart-row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr auto; gap: 10px; align-items: center; }
+.chart-label { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-track { height: 10px; border-radius: 4px; background: rgba(255,255,255,.05); overflow: hidden; }
+.chart-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; min-width: 2px; transition: width .4s var(--ease); }
+.chart-row:hover .chart-bar { filter: brightness(1.15); }
+.chart-value { min-width: 60px; text-align: right; }
+.chart-cols { display: flex; align-items: flex-end; gap: 10px; height: 160px; padding-top: 6px; overflow-x: auto; }
+.chart-col { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1 0 36px; height: 100%; }
+.chart-col-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.chart-colbar { width: 12px; border-radius: 4px 4px 0 0; min-height: 2px; transition: height .4s var(--ease); }
+.chart-colbar:hover { filter: brightness(1.2); }
+@media (max-width: 860px) { .chart-row { grid-template-columns: 90px 1fr auto; } }
