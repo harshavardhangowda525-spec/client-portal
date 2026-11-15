@@ -299,3 +299,8 @@ Before using the portal with a real client:
 - [ ] **Razorpay:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Test with test-mode keys first. For the webhook, set `RAZORPAY_WEBHOOK_SECRET` and point a Razorpay webhook (events `payment.captured`, `order.paid`) at `https://<your-domain>/api/razorpay/webhook`.
 
 **Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`, `GROQ_API_KEY`. All of them are read only on the server.
+
+
+## Sales automation integration
+
+`POST /api/integrations/sales-lead` lets the Infinity sales automation create a client, publish a proposal (using the portal's own pricing engine and numbering) and issue a one-time invitation, after the founder approves a quotation. It authenticates with `Authorization: Bearer $SALES_INTEGRATION_SECRET` and acts as the admin in `SALES_INTEGRATION_ADMIN_EMAIL`, or the only active admin. If a client with the same email or phone exists, it is reused. A plan maps to an active pricing package whose name contains basic, premium or advanced; when there is no such package, the proposal is itemised at the price sent. The endpoint returns `proposal_link` and `invite_link`, and sends no email; the sales system delivers the links on WhatsApp. With `SALES_INTEGRATION_SECRET` unset, the endpoint returns 503.
