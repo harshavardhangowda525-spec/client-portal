@@ -98,6 +98,7 @@ test("client request: AI clarification → confirmation → admin briefing, acti
   await client.getByLabel("Upload screenshot").setInputFiles(png);
   const canvas = client.getByLabel(/Screenshot — draw/);
   await expect(canvas).toBeVisible();
+  await canvas.evaluate((el) => el.scrollIntoView({ block: "center" })); // keep it clear of the phone bottom tab bar
   const box = (await canvas.boundingBox())!;
   await client.mouse.move(box.x + 20, box.y + 20); await client.mouse.down(); await client.mouse.move(box.x + 120, box.y + 80); await client.mouse.up();
   await expect(client.getByText("1 mark(s)")).toBeVisible();

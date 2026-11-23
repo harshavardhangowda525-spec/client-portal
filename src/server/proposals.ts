@@ -348,6 +348,7 @@ export async function sendProposal(actor: Actor, proposalId: string, opts: { sen
       await logEvent(tx, actor, proposalId, info.v.id, "email", { status: email!.status, error: email!.error ?? null });
     });
   }
+  await referralHook((r) => r.onProposalEvent(info.v.client_id, "sent", proposalId));
   return { portalUsers: info.users, email };
 }
 
@@ -580,8 +581,10 @@ const acceptSchema = z.object({
 /** Electronic acceptance: records identity, time, version and exact terms. It is not a verified digital signature. */
 export async function acceptProposal(actor: Actor, versionId: string, raw: unknown, meta: { ip?: string | null; ua?: string | null } = {}) {
   const d = parse(acceptSchema, raw);
-  return withDb(actor, async (tx) => {
+  let accepted: { clientId: string; proposalId: string } | null = null;
+  const result = await withDb(actor, async (tx) => {
     const v = await loadForResponse(tx, actor, versionId);
+    accepted = { clientId: v.client_id, proposalId: v.proposal_id };
     const items = await tx<ProposalItem[]>`select * from proposal_items where version_id = ${versionId} order by position`;
     const hash = proposalHash(v.number, v, items);
     if (hash !== d.content_hash) throw new AppError("This proposal changed while you were reviewing it. Please reload and review it again.");
@@ -605,6 +608,9 @@ export async function acceptProposal(actor: Actor, versionId: string, raw: unkno
     await notifyAdmins(tx, actor, { type: "proposal_accepted", link: `/admin/proposals/${v.proposal_id}`, title: `${actor.name} accepted proposal ${v.number} (v${v.version_no})` });
     return { hash };
   });
+  const acc = accepted as { clientId: string; proposalId: string } | null;
+  if (acc) await referralHook((r) => r.onProposalEvent(acc.clientId, "accepted", acc.proposalId));
+  return result;
 }
 
 export async function requestProposalChanges(actor: Actor, versionId: string, raw: unknown) {
@@ -744,4 +750,9 @@ export async function unlinkedClientProposals(actor: Actor, clientId: string) {
       where p.client_id = ${clientId} and p.project_id is null and p.cancelled_at is null order by p.created_at desc`;
     return rows.map((r) => ({ ...r, status: effectiveProposalStatus(r) }));
   });
+}
+
+/** Referral engine hooks never block or fail the proposal flow. */
+async function referralHook(fn: (r: typeof import("./referrals")) => Promise<unknown>) {
+  try { await fn(await import("./referrals")); } catch (e) { console.error("[referral hook]", e); }
 }

@@ -5,19 +5,22 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./icons";
 import { Toaster } from "./forms";
+import { ThemeToggle } from "./theme-toggle";
 
 export type NavItem = { href: string; label: string; icon: IconName; count?: number; exact?: boolean };
 export type NavGroup = { label?: string; items: NavItem[] };
 
-export function Shell({ groups, user, children, topRight, logout, banner }: {
+export function Shell({ groups, user, children, topRight, logout, banner, bottomNav }: {
   groups: NavGroup[]; user: { name: string; sub: string; initials: string }; children: ReactNode; topRight?: ReactNode; logout: ReactNode; banner?: ReactNode;
+  /** Up to 5 items shown as a bottom tab bar on phones. */
+  bottomNav?: NavItem[];
 }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   useEffect(() => setOpen(false), [path]);
   const active = (i: NavItem) => (i.exact ? path === i.href : path === i.href || path.startsWith(`${i.href}/`));
   return (
-    <div className="app" data-nav-open={open}>
+    <div className="app" data-nav-open={open} data-bottom-nav={bottomNav?.length ? "true" : undefined}>
       <a href="#main" className="skip-link">Skip to content</a>
       <aside className="sidebar" aria-label="Main navigation">
         <Link href="/" className="brand">
@@ -42,6 +45,7 @@ export function Shell({ groups, user, children, topRight, logout, banner }: {
               <div className="tiny faint truncate">{user.sub}</div>
             </div>
           </div>
+          <ThemeToggle />
           {logout}
         </div>
       </aside>
@@ -53,9 +57,20 @@ export function Shell({ groups, user, children, topRight, logout, banner }: {
             <Icon name="menu" />
           </button>
           <div className="spacer" />
+          <span className="hide-lg"><ThemeToggle compact /></span>
           {topRight}
         </header>
         <main id="main" className="content"><div key={path} className="page-anim">{children}</div></main>
+        {bottomNav?.length ? (
+          <nav className="bottom-nav" aria-label="Quick navigation">
+            {bottomNav.slice(0, 5).map((i) => (
+              <Link key={i.href} href={i.href} aria-current={active(i) ? "page" : undefined}>
+                <span className="bottom-nav-icon"><Icon name={i.icon} />{i.count ? <span className="dot" aria-hidden="true" /> : null}</span>
+                <span>{i.label}</span>{i.count ? <span className="sr-only">{`, ${i.count} new`}</span> : null}
+              </Link>
+            ))}
+          </nav>
+        ) : null}
         <Toaster />
       </div>
     </div>

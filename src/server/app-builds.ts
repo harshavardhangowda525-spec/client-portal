@@ -82,7 +82,8 @@ export async function publishAppBuild(actor: Actor, projectId: string, input: un
     await notifyProjectClients(tx, actor, projectId, { type: "app_build_ready", title, link: `/portal/${projectId}/app` });
     const members = await tx<{ email: string; name: string }[]>`
       select u.email, u.name from project_members m join users u on u.id = m.user_id
-      where m.project_id = ${projectId} and u.role = 'client' and u.disabled_at is null`;
+      where m.project_id = ${projectId} and u.role = 'client' and u.disabled_at is null
+        and coalesce((select c.notify_email from client_profiles c where c.id = u.client_id), true)`;
     return { id: b.id, version: next, title, members, projectName: project.name };
   });
   // Email outside the transaction; delivery results are logged and never block publishing.

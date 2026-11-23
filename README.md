@@ -74,7 +74,7 @@ insert into schema_migrations (name) values ('002_proposals.sql');
 grant select, insert, update, delete on all tables in schema public to portal_app;
 grant usage, select on all sequences in schema public to portal_app;
 ```
-For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` through `008_infinity_resolve.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
+For later migrations, such as `003_client_archive.sql`, `004_maintenance.sql` through `009_referrals.sql`, repeat step 1 with that file, then record it the same way, for example `insert into schema_migrations (name) values ('003_client_archive.sql');`. Re-running the grants afterwards is harmless.
 
 Running `npm run db:migrate` as the database owner does the first step automatically. You still need the grants if the app connects as `portal_app`.
 
@@ -92,7 +92,7 @@ Optional, clearly labelled sample data: `npm run sample:seed`. Remove it with `n
 
 ### Tests
 ```bash
-npm test                        # 125 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
+npm test                        # 140 integration/unit tests against a real Postgres (TEST_DATABASE_URL, default …/portal_test; the DB is reset)
 npm run test:e2e                # full browser workflow against a running app (needs an admin: E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)
 ```
 The tests cover:
@@ -204,6 +204,103 @@ Failed emails are retried up to 3 times. Links in emails open the admin dashboar
   - Pages refresh every few seconds, not instantly.
 - **Tests:** `npm test` covers the service with a mocked Groq API and a local SMTP server. For browser tests, run `node e2e/mock-groq.mjs`, start the app with `GROQ_BASE_URL=http://127.0.0.1:4010 GROQ_API_KEY=test`, then run `E2E_GROQ_MOCK=1 npm run test:e2e`.
 
+## Referral engine (feedback, referrals, leads, calls, conversions)
+
+**1. Trigger.** When you set a project to **Completed**, a referral workflow is created, once per project. If the project is reopened, the workflow pauses; if it's cancelled, the workflow is cancelled. A project with an open complaint isn't eligible. Every step is recorded in **Referrals → Automation log**, with an event ID, status, attempts and a retry button.
+
+**2. Feedback.**
+- The client sees "Your project is complete!" in the portal and gets an email.
+- Reminders are sent after 3 and 7 days by default, at most once each, and respect the client's email opt-out (**My Referrals → Email preferences**).
+- The client gives five star ratings, comments, suggestions, and can tick consent to use the comments as a testimonial.
+- How a response is classified:
+  - **4–5 stars:** the referral invitation opens.
+  - **3 stars:** the invitation is held and the project manager (or all admins) is told.
+  - **1–2 stars:** no referral ask, and a high-priority **service-recovery ticket** is opened in Infinity Resolve.
+
+  A very low score in any one rating, or an open complaint, also stops a response counting as "happy". The thresholds are configurable.
+
+**3. Referring.** In **My Referrals**, the client can:
+- create a secure link, `APP_URL/r/<random token>`, and share it by copy, WhatsApp, email, the browser's share menu or a QR code
+- regenerate the link (the old one stops working) or turn it off
+- introduce a business directly. The prospect's contact details are kept only if the client confirms they have permission, and the prospect is never contacted automatically.
+
+The client's history shows privacy-safe labels only: "Enquiry submitted", "Under review", "Successful referral".
+
+**4. Landing page and enquiry** (public, `/r/<token>`):
+- **What it shows:** your services and the problems you solve, plus testimonials (only with the client's consent **and** your approval). It never names the referring client.
+- **Checks:**
+  - the token is validated on the server
+  - unique daily visitors are counted without storing IP addresses
+  - a hidden spam field and a timing check stop bots
+  - enquiries per connection are rate-limited
+  - duplicate enquiries are merged into the existing lead
+  - self-referrals and existing clients are flagged and not credited
+- **Attribution:** written once and locked in the database.
+
+**5. Leads & pipeline** (**Admin → Referrals & leads**):
+- **What a lead holds:** stages from *Enquiry submitted* to *Won / Lost / Disqualified*, an owner, a timeline, follow-up tasks and notes.
+- **"Won" is never set by hand.** It follows the referred client's **first confirmed payment** (net of refunds; configurable to "proposal accepted"). A refund reverses the conversion.
+- **Create client & proposal** turns the lead into a client record and opens the proposal builder. Sending and accepting the proposal update the lead automatically.
+
+**6. Discovery calls:**
+- The prospect books from `/book/<token>`, which arrives right after their enquiry and in the confirmation email. Only real free slots from your weekly hours are offered (**Discovery calls** tab).
+- Double-booking is impossible: there's a unique database index on scheduled start times.
+- Reschedule and cancel are supported. Confirmation and day-before reminder emails are sent, and you record outcomes and notes.
+
+**7. Referral intelligence:**
+- **Charts and tables:** a funnel, monthly acquisition, revenue, lead sources, stage distribution, time to conversion, a top-referrer leaderboard and results by service.
+- **Calculation:** every number is calculated from database records, with filters, and the formula for each metric is shown on the page.
+- **Optional AI (Groq):** feedback summaries, lead-qualification suggestions, follow-up drafts you edit before sending, and pipeline summaries. AI never sends anything or changes a stage, payment or contract.
+
+**8. Daily automation:** feedback requests and reminders, delayed invitations, follow-up tasks (qualified with no call; call with no proposal), call reminders, outcome prompts, and retries of failed events and emails.
+- It runs inside the existing 9:00 AM IST cron (`/api/cron/maintenance`), so no extra Vercel cron is needed.
+- **Referrals → Run reminders & follow-ups now** runs it immediately.
+
+**Settings** (**Referrals → Settings**):
+- program on/off and pause
+- email on/off
+- feedback delay, reminder days, satisfaction thresholds and invitation delay
+- link expiry, follow-up timing, default owner, enquiry rate limit and the conversion rule
+- the share message and the landing page text
+
+Rewards are not enabled.
+
+## Growth portal (premium client experience)
+
+Migration `010_growth_portal.sql` adds the growth features on top of the existing portal. Existing financial records are not changed.
+
+**Client side**
+- **Design:** dark and light themes (toggle in the sidebar or top bar; kept in a `theme` cookie), a bottom tab bar on phones, staggered card entrances and timeline animations. All motion is turned off for people who prefer reduced motion.
+- **Dashboard** (`/portal/<project>`): your next step, 8 quick actions, a payment summary, recent activity built only from records the client may see, a recommended service with the reason, and a referral card.
+- **UPI scanner:** **Pay by UPI** opens an animated scanner around the invoice's QR code. On phones there is also an **Open UPI app** button with the amount filled in. Payments still count only after an admin confirms them; "I've paid" only sends the reference (UTR).
+  - The payee comes from **Settings → Maintenance & payments**. The migration fills in `9980801231@ybl` / "Infinity Web & Apps" only when no UPI ID was saved, and never overwrites one.
+- **Review Studio** (`/portal/<project>/preview`): Pending review → Changes requested → Updated → Approved, desktop/tablet/mobile previews and full screen.
+  - Requesting changes creates a revision task (Admin → Infinity Resolve → actions).
+  - Approving answers the linked approval request. It records who approved and when, and never changes prices.
+- **Services** (`/portal/services`): the admin-managed catalogue.
+  - Recommendations come from the client's business category, each with its reason, and can be hidden.
+  - **Request upgrade** records an inquiry, opens an opportunity in the pipeline (`source = upgrade_request`) and notifies admins. Nothing is charged.
+- **AI advisor** (`/portal/advisor`): suggests only catalogue services.
+  - Only the client's question and business category are sent to Groq.
+  - Replies that state an unlisted price, a timeline or a guarantee are replaced.
+  - Without `GROQ_API_KEY` (or with the advisor switched off) a rule-based matcher answers instead.
+  - Chats expire after 90 days (purged by the daily cron), and clients can delete them.
+  - **Request a consultation** creates opportunities (`source = ai_advisor`).
+- **Meetings** (`/portal/meetings`): book, reschedule or cancel a 15-minute consultation, project check-in, design walkthrough or support call.
+  - It uses the same calendar as discovery calls (**Referrals → Discovery calls → availability**), so only real free slots are offered, and a unique index plus a lock prevent double booking.
+  - A video link is added only if a default meeting link is configured.
+- **Refer & earn:** reward campaigns, plus a reward status for each referral. A client can also submit a testimonial with consent to publish the exact text.
+- **Account → Notify me by:** turn optional emails on or off. WhatsApp needs explicit consent, a phone number and the WhatsApp Cloud API variables. Until those are configured, nothing is sent and the page says so.
+
+**Admin side**
+- **Revenue & growth** (`/admin/growth`): 11 key numbers, with each definition on the page, and revenue from upgrades and referrals by month (confirmed payments net of refunds). Also the sales pipeline (New lead → Contacted → Interested → Demo scheduled → Proposal sent → Won / Lost), rewards waiting for approval, and failed jobs.
+- **Services & upgrades** (`/admin/services`): edit the catalogue (price text, benefits, recommendation keywords, visibility) and update request statuses, which notifies the client.
+- **Referrals → Rewards:** create campaigns. A reward becomes *eligible* only when a referred lead converts (first confirmed payment) while a campaign is active.
+  - Admins approve or reject it, then mark it issued with a note.
+  - A refund reverses rewards that weren't issued yet. Admins are alerted if a reward had already been issued.
+  - Possible duplicates are flagged.
+- **Showcase** (`/admin/showcase`, public at `/showcase`): case studies with before and after images and approved results. They can only be published once the client's permission is recorded. Testimonials are published only after admin review, and clients can withdraw them.
+
 ## View as client
 
 **View as client** is on every client page and project page. It opens the real portal exactly as that client sees it, with a banner across the top and an **Exit client view** button.
@@ -295,7 +392,7 @@ Before using the portal with a real client:
 - [ ] **Email (SMTP):** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. Any SMTP provider works (Google Workspace, Zoho, Brevo, Postmark, SES…). Set up SPF and DKIM for the sending domain.
 - [ ] **WhatsApp Cloud API:** `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`. You need a Meta Business account and an approved template with one body variable. Without it, use the manual **Open in WhatsApp** button.
 - [ ] **Maintenance check:** set `CRON_SECRET` (`openssl rand -hex 32`) in Vercel. `vercel.json` schedules the daily call. Check **Admin → Maintenance**: "Last check" should update daily.
-- [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Scan the QR preview with your phone to verify it, but don't pay.
+- [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Migration 010 pre-fills `9980801231@ybl` if none was saved. Scan the QR preview with your phone to check the payee name, but don't pay.
 - [ ] **Razorpay:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Test with test-mode keys first. For the webhook, set `RAZORPAY_WEBHOOK_SECRET` and point a Razorpay webhook (events `payment.captured`, `order.paid`) at `https://<your-domain>/api/razorpay/webhook`.
 
 **Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`, `GROQ_API_KEY`. All of them are read only on the server.

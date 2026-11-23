@@ -137,9 +137,9 @@ const STATUS_TRANSITIONS: Record<string, string[]> = {
 
 export async function setProjectStatus(actor: Actor, projectId: string, status: string, reason?: string | null) {
   assertAdmin(actor);
-  return withDb(actor, async (tx) => {
+  const from = await withDb(actor, async (tx) => {
     const p = await getProjectFor(tx, actor, projectId);
-    if (p.status === status) return;
+    if (p.status === status) return null;
     if (!STATUS_TRANSITIONS[p.status]?.includes(status)) {
       throw new AppError(`A project cannot move from "${p.status}" to "${status}".`);
     }
@@ -149,7 +149,12 @@ export async function setProjectStatus(actor: Actor, projectId: string, status: 
               cancel_reason = ${status === "cancelled" || status === "declined" ? reason ?? null : null}
              where id = ${projectId}`;
     await audit(tx, actor, "project.status_changed", "project", projectId, projectId, { from: p.status, to: status, reason });
+    return p.status;
   });
+  // project.completed / reopened / cancelled → referral workflow (never blocks the status change).
+  if (from) {
+    try { await (await import("./referrals")).onProjectStatusChanged(projectId, from, status); } catch (e) { console.error("[referral project hook]", e); }
+  }
 }
 
 /**

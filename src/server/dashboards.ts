@@ -162,3 +162,33 @@ export async function databaseSecurityStatus(actor: Actor) {
     return { rlsEnforced: !r.rolsuper && !r.rolbypassrls, tablesForced: t.forced, tablesTotal: t.total, sampleClients: s.n };
   });
 }
+
+export type ActivityItem = { at: Date; title: string; meta: string; tone: "blue" | "green" | "violet" | "amber" };
+
+/** Client-safe activity timeline built only from records the client may see (RLS still applies). */
+export async function clientActivity(actor: Actor, projectId: string, limit = 8): Promise<ActivityItem[]> {
+  return withDb(actor, async (tx) => {
+    await getProjectFor(tx, actor, projectId);
+    const rows = await tx<{ at: Date; title: string; meta: string; tone: ActivityItem["tone"] }[]>`
+      select * from (
+        select completed_at as at, 'Milestone completed: ' || title as title, 'Project progress' as meta, 'green' as tone
+          from milestones where project_id = ${projectId} and status = 'completed' and completed_at is not null
+        union all
+        select coalesce(confirmed_at, created_at), 'Payment of ₹' || to_char(amount, 'FM99,99,99,990') || ' confirmed', coalesce('Receipt ' || receipt_number, 'Payment'), 'green'
+          from payments where project_id = ${projectId} and status = 'confirmed'
+        union all
+        select published_at, 'Version ' || version_no || ' shared for review', coalesce(title, 'Website preview'), 'blue'
+          from previews where project_id = ${projectId}
+        union all
+        select reviewed_at, case status when 'approved' then 'You approved version ' || version_no else 'Your feedback on version ' || version_no || ' was received' end, 'Review Studio', 'violet'
+          from previews where project_id = ${projectId} and reviewed_at is not null
+        union all
+        select a.accepted_at, 'Proposal ' || p.number || ' accepted', 'Signed by ' || a.signer_name, 'amber'
+          from proposal_acceptances a join proposals p on p.id = a.proposal_id where p.project_id = ${projectId}
+        union all
+        select created_at, title, 'Project update', 'blue'
+          from project_updates where project_id = ${projectId} ${actor.role === "client" ? tx`and visibility = 'client'` : tx``}
+      ) x where at is not null order by at desc limit ${limit}`;
+    return rows;
+  });
+}
