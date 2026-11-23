@@ -63,8 +63,11 @@ test("referral engine: completion → feedback → link → enquiry → booking 
   }
 
   // 2–4. Client gets the feedback request, rates 5 stars, referral invitation opens.
-  await client.reload();
-  await expect(client.getByText("Your project is complete!")).toBeVisible();
+  // The admin's Update button is also disabled while saving, so retry until the completion has been processed.
+  await expect(async () => {
+    await client.reload();
+    await expect(client.getByText("Your project is complete!")).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 30_000 });
   await client.getByRole("link", { name: "Share feedback" }).click();
   for (const g of ["Overall satisfaction", "Project quality", "Communication", "Delivery experience", "Overall experience"]) {
     await client.getByRole("radiogroup", { name: g }).getByRole("radio", { name: "5 stars" }).click();

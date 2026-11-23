@@ -16,7 +16,7 @@ export default async function Calls() {
   const table = (rows: (typeof upcoming)[number][]) => rows.length === 0 ? <Empty icon="clock" title="No calls" /> : (
     <div className="table-wrap"><table className="table table-cards"><thead><tr><th>When (IST)</th><th>Lead</th><th>Type</th><th>Status</th><th>Owner</th></tr></thead>
       <tbody>{rows.map((c) => (
-        <tr key={c.id}><td data-label="When">{fmtCall(c.starts_at)}</td><td data-label="Lead"><Link href={`/admin/referrals/leads/${c.lead_id}`}>{c.business_name}</Link><div className="tiny faint">{c.contact_name ?? ""}</div></td>
+        <tr key={c.id}><td data-label="When">{fmtCall(c.starts_at)}</td><td data-label="Lead">{c.lead_id ? <Link href={`/admin/referrals/leads/${c.lead_id}`}>{c.business_name}</Link> : <>{c.business_name} <span className="badge violet plain">Client meeting{c.purpose ? ` · ${c.purpose.replace(/_/g, " ")}` : ""}</span></>}<div className="tiny faint">{c.contact_name ?? ""}{c.agenda ? ` · ${c.agenda.slice(0, 80)}` : ""}</div></td>
           <td data-label="Type" className="small">{MEETING_TYPES[c.meeting_type]}</td><td data-label="Status"><Badge tone={c.status === "completed" ? "green" : c.status === "scheduled" ? "blue" : ""}>{c.status.replace("_", " ")}</Badge>{c.outcome && <div className="tiny faint">{c.outcome.replace(/_/g, " ")}</div>}</td>
           <td data-label="Owner" className="small">{c.owner_name ?? "—"}</td></tr>
       ))}</tbody></table></div>

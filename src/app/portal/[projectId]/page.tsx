@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { requireClient } from "@/lib/session";
-import { projectOverview } from "@/server/dashboards";
-import { Badge, Empty, MilestoneBadge, Panel, ProgressRing, ProjectBadge } from "@/components/ui";
+import { projectOverview, clientActivity } from "@/server/dashboards";
+import { getBilling } from "@/server/billing";
+import { getPaymentDetails } from "@/server/maintenance";
+import { topRecommendation } from "@/server/marketplace";
+import { Badge, Empty, MilestoneBadge, Money, Panel, ProgressBar, ProgressRing, ProjectBadge } from "@/components/ui";
+import { PayBox } from "@/components/views/pay-box";
 import { Icon } from "@/components/icons";
 import { fmtDate, PROJECT_TYPES, timeAgo, UPDATE_KINDS } from "@/lib/format";
 import { ApprovalResponse } from "./approval-response";
@@ -17,8 +21,26 @@ function greeting() {
 export default async function Overview({ params }: { params: Promise<{ projectId: string }> }) {
   const actor = await requireClient();
   const { projectId } = await params;
-  const [o, fbReq] = await Promise.all([projectOverview(actor, projectId), getFeedbackRequest(actor, projectId).catch(() => null)]);
   const base = `/portal/${projectId}`;
+  const [o, fbReq, activity, billing, pd, rec] = await Promise.all([
+    projectOverview(actor, projectId), getFeedbackRequest(actor, projectId).catch((e) => { console.error("[feedback request]", e); return null; }), clientActivity(actor, projectId),
+    getBilling(actor, projectId), getPaymentDetails(), topRecommendation(actor),
+  ]);
+  const unpaid = billing.invoices.filter((i) => ["issued", "partially_paid"].includes(i.status) && i.balance > 0)
+    .sort((a, b) => (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999"));
+  const nextInvoice = unpaid[0] ?? null;
+  const reportedIds = new Set(billing.payments.filter((p) => p.status === "pending" && p.invoice_id).map((p) => p.invoice_id));
+  const nextStep = o.pendingActions[0] ?? null;
+  const quick: { href: string; label: string; icon: Parameters<typeof Icon>[0]["name"]; tint: string }[] = [
+    { href: `${base}/preview`, label: "Preview website", icon: "monitor", tint: "blue" },
+    { href: `${base}/proposal`, label: "Review proposal", icon: "file", tint: "violet" },
+    { href: `${base}/preview`, label: "Approve design", icon: "check", tint: "green" },
+    { href: `${base}/preview#feedback`, label: "Request revision", icon: "pen", tint: "amber" },
+    { href: `${base}/payments`, label: "Make payment", icon: "wallet", tint: "blue" },
+    { href: `${base}/resolve`, label: "Contact support", icon: "chat", tint: "violet" },
+    { href: "/portal/services", label: "Explore services", icon: "store", tint: "green" },
+    { href: "/portal/referrals", label: "Refer a business", icon: "gift", tint: "amber" },
+  ];
   const askFeedback = fbReq?.workflow?.status === "awaiting_feedback" && !fbReq.feedback;
   const previewReady = o.latestPreview && o.latestPreview.status !== "superseded";
   const stage = o.project.current_stage ?? o.current?.title ?? "Getting started";
@@ -58,6 +80,31 @@ export default async function Overview({ params }: { params: Promise<{ projectId
           <Link href={`${base}/feedback`} className="btn btn-primary">Share feedback</Link>
         </section>
       )}
+      {nextStep && (
+        <section className="glass panel next-step row-between" aria-label="Your next step" style={{ gap: 16 }}>
+          <div className="row" style={{ alignItems: "flex-start", gap: 14, flex: "1 1 360px" }}>
+            <span className="tint blue" aria-hidden="true"><Icon name={nextStep.kind === "invoice" ? "wallet" : nextStep.kind === "proposal" ? "file" : "eye"} /></span>
+            <div className="stack-sm">
+              <span className="eyebrow" style={{ margin: 0 }}>Your next step</span>
+              <strong style={{ fontSize: "1.1rem" }}>{nextStep.title}</strong>
+              {nextStep.due && <span className="small muted">Due {fmtDate(nextStep.due)}</span>}
+            </div>
+          </div>
+          {nextStep.kind === "invoice" && nextInvoice
+            ? <PayBox invoice={{ id: nextInvoice.id, number: nextInvoice.number, balance: nextInvoice.balance }} pd={pd} reported={reportedIds.has(nextInvoice.id)} />
+            : <Link href={nextStep.href} className="btn btn-primary">Open <Icon name="external" /></Link>}
+        </section>
+      )}
+
+      <section aria-labelledby="qa-h">
+        <h2 id="qa-h" style={{ marginBottom: 12 }}>Quick actions</h2>
+        <div className="quick-grid stagger">
+          {quick.map((q) => (
+            <Link key={q.label} href={q.href} className="quick"><span className={`tint ${q.tint}`} aria-hidden="true"><Icon name={q.icon} /></span>{q.label}</Link>
+          ))}
+        </div>
+      </section>
+
       {o.pendingActions.length > 0 && (
         <Panel title={<><Icon name="alert" style={{ color: "var(--amber)" }} /> Needs your attention</>} sub="These items are waiting on you.">
           <div className="list">
@@ -108,6 +155,58 @@ export default async function Overview({ params }: { params: Promise<{ projectId
             </div>
           ) : <Empty icon="activity" title="No updates yet">We will post progress updates here as work moves forward.</Empty>}
         </Panel>
+      </div>
+
+      <div className="grid grid-main">
+        <Panel title="Recent activity" actions={<Link href={`${base}/timeline`} className="btn btn-sm btn-ghost">Timeline</Link>}>
+          {activity.length ? (
+            <ol className="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {activity.map((a, i) => (
+                <li key={i} className="list-item" style={{ alignItems: "flex-start" }}>
+                  <span className="activity-dot" style={{ background: `var(--${a.tone === "violet" ? "violet" : a.tone})` }} aria-hidden="true" />
+                  <div className="grow"><div style={{ fontWeight: 500 }}>{a.title}</div><div className="small faint">{a.meta}</div></div>
+                  <span className="tiny faint" style={{ whiteSpace: "nowrap" }}>{timeAgo(a.at)}</span>
+                </li>
+              ))}
+            </ol>
+          ) : <Empty icon="activity" title="Nothing yet">Milestones, payments and reviews will show up here.</Empty>}
+        </Panel>
+        <div className="stack" style={{ gap: 16 }}>
+          <Panel title="Payments" actions={nextInvoice?.due_date ? <Badge tone={nextInvoice.overdue ? "red" : "amber"} plain>{nextInvoice.overdue ? "Overdue" : `Due ${fmtDate(nextInvoice.due_date)}`}</Badge> : undefined}>
+            {billing.contractTotal == null && !billing.invoices.length ? (
+              <p className="small muted" style={{ margin: 0 }}>Payment details appear here once your proposal is accepted.</p>
+            ) : (
+              <div className="stack">
+                <dl className="kv" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+                  <div><dt>Total</dt><dd className="mono"><Money value={billing.contractTotal ?? billing.invoices.reduce((s, i) => s + Number(i.amount), 0)} /></dd></div>
+                  <div><dt>Paid</dt><dd className="mono" style={{ color: "var(--green)" }}><Money value={billing.paidTotal} /></dd></div>
+                  <div><dt>Balance</dt><dd className="mono"><Money value={billing.remaining ?? billing.outstandingInvoiced} /></dd></div>
+                </dl>
+                {billing.contractTotal ? <ProgressBar value={Math.min(100, Math.round((billing.paidTotal / billing.contractTotal) * 100))} label="Paid so far" /> : null}
+                {nextInvoice ? (
+                  <div className="row-between">
+                    <span className="small muted">{nextInvoice.number}: <strong style={{ color: "var(--text)" }}><Money value={nextInvoice.balance} /></strong></span>
+                    <PayBox invoice={{ id: nextInvoice.id, number: nextInvoice.number, balance: nextInvoice.balance }} pd={pd} reported={reportedIds.has(nextInvoice.id)} />
+                  </div>
+                ) : <span className="small muted">Nothing to pay right now.</span>}
+                <span className="tiny faint">Payments show as paid only after we confirm them.</span>
+              </div>
+            )}
+          </Panel>
+          {rec && (
+            <Panel title={<><Badge tone="violet" plain>Recommended</Badge> {rec.service.name}</>}>
+              <div className="stack-sm">
+                <p className="small muted" style={{ margin: 0 }}>{rec.service.summary}</p>
+                <p className="tiny faint" style={{ margin: 0 }}>Why you&apos;re seeing this: {rec.reason}</p>
+                <div className="row" style={{ marginTop: 6 }}><Link href="/portal/services" className="btn btn-sm">View details</Link><Link href="/portal/advisor" className="btn btn-sm btn-ghost">Ask the AI advisor</Link></div>
+              </div>
+            </Panel>
+          )}
+          <Panel title="Know a business that needs a website?">
+            <p className="small muted" style={{ margin: "0 0 10px" }}>Share your referral link and follow every step of their journey here.</p>
+            <Link href="/portal/referrals" className="btn btn-sm btn-primary"><Icon name="gift" /> Refer a business</Link>
+          </Panel>
+        </div>
       </div>
     </div>
   );

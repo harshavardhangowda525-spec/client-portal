@@ -22,6 +22,11 @@ export async function AdminShell({ actor, children }: { actor: Actor; children: 
           { href: "/admin/resolve", label: "Infinity Resolve", icon: "sparkle", count: resolveCount },
           { href: "/admin/referrals", label: "Referrals & leads", icon: "users" },
         ] },
+        { label: "Growth", items: [
+          { href: "/admin/growth", label: "Revenue & growth", icon: "trend" },
+          { href: "/admin/services", label: "Services & upgrades", icon: "store" },
+          { href: "/admin/showcase", label: "Showcase", icon: "star" },
+        ] },
         { label: "Account", items: [
           { href: "/admin/notifications", label: "Notifications", icon: "bell", count: unread },
           { href: "/admin/settings", label: "Settings", icon: "settings", exact: true },

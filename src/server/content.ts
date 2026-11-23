@@ -1,3 +1,4 @@
+import { appUrl } from "@/lib/config";
 import { z } from "zod";
 import { withDb, assertAdmin, audit, getProjectFor, asSystem, type Actor, type Tx } from "./core";
 import { parse, text, optText, url, uuid } from "./validate";
@@ -71,6 +72,21 @@ export async function reviewPreview(actor: Actor, previewId: string, input: unkn
       await tx`insert into comments (project_id, target_type, target_id, author_id, body)
                values (${p.project_id}, 'preview', ${previewId}, ${actor.userId}, ${d.note})`;
     }
+    await asSystem(tx, actor, async () => {
+      if (d.decision === "approved") {
+        // A linked approval request is answered by approving the version (records who and when; never changes prices).
+        await tx`update approval_requests set status = 'approved', responded_by = ${actor.userId}, responded_at = now(), response = coalesce(${d.note ?? null}, 'Approved in Review Studio')
+                 where preview_id = ${previewId} and status = 'pending'`;
+      } else {
+        // An actionable revision task for the team, assigned to the project manager.
+        const [pm] = await tx<{ project_manager_id: string | null }[]>`select project_manager_id from projects where id = ${p.project_id}`;
+        await tx`insert into resolve_action_items (project_id, description, priority, status, assigned_to, source, dedupe_key, note)
+                 values (${p.project_id}, ${`Revise preview v${p.version_no}: ${(d.note ?? "").slice(0, 900)}`}, 'normal', 'open', ${pm?.project_manager_id ?? null}, 'manual',
+                         ${`preview-revision:${previewId}:${Date.now()}`}, 'Created from a client change request in the Review Studio')`;
+        await tx`update approval_requests set status = 'changes_requested', responded_by = ${actor.userId}, responded_at = now(), response = ${d.note ?? null}
+                 where preview_id = ${previewId} and status = 'pending'`;
+      }
+    });
     await audit(tx, actor, "preview.reviewed", "preview", previewId, p.project_id, { decision: d.decision });
     await notifyAdmins(tx, actor, {
       type: "client_feedback", projectId: p.project_id, link: `/admin/projects/${p.project_id}/previews`,
@@ -203,6 +219,11 @@ export async function addComment(actor: Actor, projectId: string, input: unknown
       await notifyProjectClients(tx, actor, projectId, { type: "message", title: `New message from ${actor.name}`, body: snippet, link });
     }
     return c.id;
+  }).then(async (id) => {
+    if (actor.role !== "client" && d.target_type === "thread") {
+      await (await import("./preferences")).whatsappNudge(projectId, `New message from ${actor.name} in your project portal: ${appUrl()}/portal/${projectId}/messages`);
+    }
+    return id;
   });
 }
 

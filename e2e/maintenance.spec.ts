@@ -89,13 +89,15 @@ test("maintenance expiry, opt-in and UPI payment", async ({ browser }) => {
   // First invoice issued immediately; pay by UPI QR and report the UTR
   const row = client.locator("tr").filter({ hasText: "INV-" });
   await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: "Pay" }).click();
+  await row.getByRole("button", { name: "Pay by UPI" }).click();
   const dialog = client.getByRole("dialog");
   await expect(dialog.getByRole("img", { name: /UPI QR code/ })).toBeVisible();
+  await expect(dialog.locator(".scanner.is-ready")).toBeVisible(); // animated scanner frame around the QR
   await expect(dialog.getByText("infinity@okhdfcbank")).toBeVisible();
   await shot(client, "m04-client-pay-qr");
+  await dialog.getByRole("button", { name: /I've paid — send the reference/ }).click();
   await dialog.getByLabel("UTR / transaction ID").fill("412345678901");
-  await dialog.getByRole("button", { name: "I've paid" }).click();
+  await dialog.getByRole("button", { name: "I've paid", exact: true }).click();
   await expect(client.getByText(/We'll confirm your payment shortly/)).toBeVisible();
   await expect(client.getByText("Payment reported")).toBeVisible();
   await expect(client.getByText("Awaiting client").or(client.getByText("Paid maintenance")).first()).toBeVisible();

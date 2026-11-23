@@ -106,12 +106,7 @@ export async function savePaymentDetails(actor: Actor, input: unknown) {
   });
 }
 
-/** UPI deep link (NPCI format) encoded in the scan-to-pay QR code. */
-export function upiLink(d: Pick<PaymentDetails, "upi_id" | "payee_name">, amount: number, note: string, ref?: string) {
-  const q = new URLSearchParams({ pa: d.upi_id, pn: d.payee_name, am: amount.toFixed(2), cu: "INR", tn: note.slice(0, 80) });
-  if (ref) q.set("tr", ref.slice(0, 35));
-  return `upi://pay?${q.toString().replace(/\+/g, "%20")}`;
-}
+export { upiLink } from "@/lib/upi";
 
 // ---------------------------------------------------------------------------
 // Templates

@@ -103,7 +103,7 @@ test("complete client project workflow", async ({ browser }) => {
   await other.close();
 
   // --- Client: review and accept the proposal from the project menu
-  await expect(client.getByText(/Review proposal IWA-P-/)).toBeVisible();
+  await expect(client.getByLabel("Your next step").getByText(/Review proposal IWA-P-/)).toBeVisible();
   await client.goto(`${portalUrl}/proposal`);
   await expect(client).toHaveURL(/\/portal\/proposals\/[0-9a-f-]{36}$/);
   await expect(client.locator(".doc .grand").getByText("₹6,000.00")).toBeVisible();

@@ -27,7 +27,7 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
         { href: base, label: "Overview", icon: "home", exact: true },
         { href: `${base}/timeline`, label: "Timeline", icon: "timeline" },
         { href: `${base}/proposal`, label: "Proposal", icon: "file" },
-        { href: `${base}/preview`, label: "Website preview", icon: "eye" },
+        { href: `${base}/preview`, label: "Review Studio", icon: "eye" },
         { href: `${base}/app`, label: "App review", icon: "phone" },
         { href: `${base}/payments`, label: "Invoices & payments", icon: "wallet" },
         { href: `${base}/maintenance`, label: "Maintenance & billing", icon: "wrench" },
@@ -39,10 +39,18 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
     });
   }
   groups.push({
+    label: "Grow",
+    items: [
+      { href: "/portal/services", label: "Services", icon: "store" },
+      { href: "/portal/advisor", label: "AI advisor", icon: "sparkle" },
+      { href: "/portal/meetings", label: "Meetings", icon: "calendar" },
+      { href: "/portal/referrals", label: "Refer & earn", icon: "gift" },
+    ],
+  });
+  groups.push({
     label: "Account",
     items: [
       { href: "/portal/proposals", label: "Proposals", icon: "file", count: awaiting },
-      { href: "/portal/referrals", label: "My Referrals", icon: "users" },
       ...(pid ? [
         { href: `/portal/${pid}/notifications`, label: "Notifications", icon: "bell" as const, count: unreadNotes },
         { href: `/portal/${pid}/account`, label: "Account", icon: "settings" as const },
@@ -57,6 +65,13 @@ export async function ClientShell({ actor, projectId, children }: { actor: Actor
   return (
     <Shell
       groups={groups}
+      bottomNav={pid ? [
+        { href: `/portal/${pid}`, label: "Home", icon: "home", exact: true },
+        { href: `/portal/${pid}/timeline`, label: "Progress", icon: "timeline" },
+        { href: `/portal/${pid}/payments`, label: "Pay", icon: "wallet" },
+        { href: `/portal/${pid}/messages`, label: "Messages", icon: "chat", count: unreadMsgs },
+        { href: "/portal/services", label: "Services", icon: "store" },
+      ] : undefined}
       user={{ name: actor.name, sub: business || actor.email, initials: initials(actor.name) }}
       logout={viewing
         ? <a href="/portal/view-as/exit" className="btn btn-ghost btn-sm btn-block" style={{ justifyContent: "flex-start" }}><Icon name="logout" /> Exit client view</a>

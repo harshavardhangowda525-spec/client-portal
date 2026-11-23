@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,11 +8,15 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const viewport: Viewport = { themeColor: "#050a18", width: "device-width", initialScale: 1 };
+export async function generateViewport(): Promise<Viewport> {
+  const light = (await cookies()).get("theme")?.value === "light";
+  return { themeColor: light ? "#f4f6fb" : "#050a18", width: "device-width", initialScale: 1 };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const theme = (await cookies()).get("theme")?.value === "light" ? "light" : "dark";
   return (
-    <html lang="en">
+    <html lang="en" data-theme={theme} suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

@@ -30,8 +30,9 @@ export async function runReferralJob(now = new Date()) {
       select id from leads where stage = 'call_completed' and proposal_sent_at is null and call_completed_at < ${new Date(now.getTime() - s.proposal_follow_up_days * 86400_000)}`);
     for (const l of noProposal) await assignAndTask(l.id, "The discovery call is done but no proposal has been sent yet", "proposal-reminder");
     out.followUps = noCall.length + noProposal.length;
-    out.calls = await runCallAutomation(now);
   }
+  out.calls = await runCallAutomation(now); // discovery calls and client meetings
+  out.advisorPurged = await (await import("./advisor")).purgeExpiredAdvisor();
   out.eventsRetried = await retryFailedEvents();
   out.emails = await retryReferralEmails();
   await withDb(SYSTEM, (tx) => tx`insert into app_settings (key, value) values ('referral_job', ${tx.json({ last_run_at: now.toISOString(), ...out } as never)})

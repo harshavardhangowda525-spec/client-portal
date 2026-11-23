@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { withDb, SYSTEM, assertAdmin, audit, type Actor, type Tx } from "./core";
 import { parse, optText } from "./validate";
 import { emit, referralEmail, assignAndTask, STAGES } from "./referrals";
+import { notifyClientUsers } from "./notify";
 import { AppError, notFound } from "@/lib/errors";
 import { sha256 } from "@/lib/crypto";
 import { appUrl, company } from "@/lib/config";
@@ -214,12 +215,17 @@ export async function recordCallOutcome(actor: Actor, callId: string, input: unk
   assertAdmin(actor);
   const d = parse(outcomeSchema, input);
   const leadId = await withDb(actor, async (tx) => {
-    const [c] = await tx<{ lead_id: string; status: string; starts_at: Date }[]>`select lead_id, status, starts_at from discovery_calls where id = ${callId}`;
+    const [c] = await tx<{ lead_id: string | null; status: string; starts_at: Date }[]>`select lead_id, status, starts_at from discovery_calls where id = ${callId}`;
     if (!c) throw notFound();
     if (c.status !== "scheduled" && c.status !== "completed") throw new AppError("This call was cancelled.");
     if (new Date(c.starts_at).getTime() > Date.now() && d.outcome !== "no_show") throw new AppError("You can record the outcome once the call has started.");
     const noShow = d.outcome === "no_show";
     await tx`update discovery_calls set status = ${noShow ? "no_show" : "completed"}, outcome = ${d.outcome}, notes = ${d.notes} where id = ${callId}`;
+    if (!c.lead_id) {
+      // A meeting with an existing client: no pipeline changes.
+      await audit(tx, actor, "meeting.outcome", "discovery_call", callId, null, { outcome: d.outcome });
+      return null;
+    }
     if (!noShow) {
       await tx`update leads set call_completed_at = coalesce(call_completed_at, now()),
                  qualified_at = case when ${d.outcome} in ('qualified', 'proposal_requested') then coalesce(qualified_at, now()) else qualified_at end,
@@ -234,6 +240,7 @@ export async function recordCallOutcome(actor: Actor, callId: string, input: unk
     await audit(tx, actor, "lead.call_outcome", "discovery_call", callId, null, { outcome: d.outcome });
     return c.lead_id;
   });
+  if (!leadId) return;
   if (d.outcome === "no_show") await assignAndTask(leadId, "The prospect missed the discovery call — follow up to rebook", `no-show-${callId}`);
   else await emit("referral.call.completed", `referral.call.completed:${callId}`, { lead_id: leadId }, { call_id: callId, outcome: d.outcome });
 }
@@ -241,8 +248,12 @@ export async function recordCallOutcome(actor: Actor, callId: string, input: unk
 export async function cancelCall(actor: Actor, callId: string) {
   assertAdmin(actor);
   await withDb(actor, async (tx) => {
-    const [c] = await tx<{ lead_id: string; starts_at: Date }[]>`update discovery_calls set status = 'cancelled', cancelled_at = now() where id = ${callId} and status = 'scheduled' returning lead_id, starts_at`;
+    const [c] = await tx<{ lead_id: string | null; client_id: string | null; starts_at: Date }[]>`update discovery_calls set status = 'cancelled', cancelled_at = now() where id = ${callId} and status = 'scheduled' returning lead_id, client_id, starts_at`;
     if (!c) throw new AppError("Only scheduled calls can be cancelled.");
+    if (!c.lead_id) {
+      if (c.client_id) await notifyClientUsers(tx, actor, c.client_id, { type: "meeting", title: `Your meeting on ${fmt(c.starts_at)} was cancelled by our team. Please pick a new time.`, link: "/portal/meetings" });
+      return;
+    }
     await tx`update leads set stage = case when stage = 'call_scheduled' then 'qualified' else stage end where id = ${c.lead_id}`;
     await tx`insert into lead_activities (lead_id, actor_id, kind, body) values (${c.lead_id}, ${actor.userId}, 'call', ${`Call on ${fmt(c.starts_at)} cancelled by the team`})`;
   });
@@ -250,9 +261,10 @@ export async function cancelCall(actor: Actor, callId: string) {
 
 export async function listCalls(actor: Actor, scope: "upcoming" | "past" = "upcoming") {
   assertAdmin(actor);
-  return withDb(actor, (tx) => tx<{ id: string; lead_id: string; starts_at: Date; ends_at: Date; meeting_type: MeetingType; meeting_link: string | null; status: string; outcome: string | null;
-    business_name: string; contact_name: string | null; owner_name: string | null; stage: string }[]>`
-    select c.*, l.business_name, l.contact_name, l.stage, u.name as owner_name from discovery_calls c join leads l on l.id = c.lead_id left join users u on u.id = c.owner_id
+  return withDb(actor, (tx) => tx<{ id: string; lead_id: string | null; client_id: string | null; purpose: string | null; agenda: string | null; starts_at: Date; ends_at: Date; meeting_type: MeetingType;
+    meeting_link: string | null; status: string; outcome: string | null; business_name: string; contact_name: string | null; owner_name: string | null; stage: string | null }[]>`
+    select c.*, coalesce(l.business_name, cp.business_name) as business_name, coalesce(l.contact_name, cp.owner_name) as contact_name, l.stage, u.name as owner_name
+    from discovery_calls c left join leads l on l.id = c.lead_id left join client_profiles cp on cp.id = c.client_id left join users u on u.id = c.owner_id
     where ${scope === "upcoming" ? tx`c.status = 'scheduled' and c.ends_at > now() - interval '2 hours'` : tx`(c.status <> 'scheduled' or c.ends_at <= now() - interval '2 hours')`}
     order by c.starts_at ${scope === "upcoming" ? tx`asc` : tx`desc`} limit 200`);
 }
@@ -260,16 +272,17 @@ export async function listCalls(actor: Actor, scope: "upcoming" | "past" = "upco
 /** Daily: reminders for tomorrow's calls; prompt owners to record outcomes of past calls. */
 export async function runCallAutomation(now = new Date()) {
   const due = await withDb(SYSTEM, (tx) => tx<{ id: string; lead_id: string; starts_at: Date; meeting_type: MeetingType; meeting_link: string | null; email: string | null; contact_name: string | null }[]>`
-    select c.id, c.lead_id, c.starts_at, c.meeting_type, c.meeting_link, l.email, l.contact_name from discovery_calls c join leads l on l.id = c.lead_id
-    where c.status = 'scheduled' and c.reminder_sent_at is null and c.starts_at > ${now} and c.starts_at < ${new Date(now.getTime() + 36 * 3600_000)}`);
+    select c.id, c.lead_id, c.starts_at, c.meeting_type, c.meeting_link, coalesce(l.email, cp.email) as email, coalesce(l.contact_name, cp.owner_name) as contact_name
+    from discovery_calls c left join leads l on l.id = c.lead_id left join client_profiles cp on cp.id = c.client_id
+    where (l.id is not null or cp.notify_email) and c.status = 'scheduled' and c.reminder_sent_at is null and c.starts_at > ${now} and c.starts_at < ${new Date(now.getTime() + 36 * 3600_000)}`);
   let reminders = 0;
   for (const c of due) {
     const r = await referralEmail({ key: `call-reminder:${c.id}`, to: c.email, subject: `Reminder: your call with ${company().name} — ${fmt(c.starts_at)}`,
-      body: `Hi ${c.contact_name ?? "there"},\n\nA quick reminder of your discovery call with ${company().name} on ${fmt(c.starts_at)} (India time), ${MEETING_TYPES[c.meeting_type].toLowerCase()}.${c.meeting_link ? `\nJoin: ${c.meeting_link}` : ""}\n\nSee you then!\n${company().name}` });
+      body: `Hi ${c.contact_name ?? "there"},\n\nA quick reminder of your ${c.lead_id ? "discovery call" : "meeting"} with ${company().name} on ${fmt(c.starts_at)} (India time), ${MEETING_TYPES[c.meeting_type].toLowerCase()}.${c.meeting_link ? `\nJoin: ${c.meeting_link}` : ""}\n\nSee you then!\n${company().name}` });
     if (r === "sent") reminders++;
     await withDb(SYSTEM, (tx) => tx`update discovery_calls set reminder_sent_at = now() where id = ${c.id}`);
   }
-  const ended = await withDb(SYSTEM, (tx) => tx<{ id: string; lead_id: string }[]>`select id, lead_id from discovery_calls where status = 'scheduled' and ends_at < ${new Date(now.getTime() - 2 * 3600_000)}`);
+  const ended = await withDb(SYSTEM, (tx) => tx<{ id: string; lead_id: string }[]>`select id, lead_id from discovery_calls where lead_id is not null and status = 'scheduled' and ends_at < ${new Date(now.getTime() - 2 * 3600_000)}`);
   for (const c of ended) await assignAndTask(c.lead_id, "Record the outcome of the discovery call", `outcome:${c.id}`);
   return { reminders, outcomePrompts: ended.length };
 }

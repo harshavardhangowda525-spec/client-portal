@@ -1,5 +1,8 @@
 import { requireClient } from "@/lib/session";
 import { myReferrals } from "@/server/referrals";
+import { myRewards, REWARD_STATUS } from "@/server/rewards";
+import { myTestimonials } from "@/server/showcase";
+import { TestimonialForm } from "./testimonial";
 import { Badge, Empty, PageHead, Panel } from "@/components/ui";
 import { ActionButton, ActionForm, Submit } from "@/components/forms";
 import { ShareTools } from "@/components/referrals/share";
@@ -13,11 +16,21 @@ const tone = (l: string) => (l === "Successful referral" ? "green" : l === "Clos
 
 export default async function MyReferrals() {
   const actor = await requireClient();
-  const r = await myReferrals(actor);
+  const [r, rw, testimonials] = await Promise.all([myReferrals(actor), myRewards(actor), myTestimonials(actor)]);
   return (
     <>
-      <PageHead eyebrow="Refer a Business" title="My Referrals"
+      <PageHead eyebrow="Refer & earn" title="My Referrals"
         sub="Enjoyed working with Infinity Web & Apps? Know another business that could benefit from better technology? We'd appreciate an introduction." />
+      {rw.campaign && (
+        <section className="glass panel next-step" style={{ marginBottom: 16 }} aria-label="Current referral reward">
+          <div className="stack-sm">
+            <span className="badge violet plain" style={{ alignSelf: "flex-start" }}>{rw.campaign.name}{rw.campaign.ends_on ? ` · until ${fmtDate(rw.campaign.ends_on)}` : ""}</span>
+            <h2 style={{ fontSize: "1.25rem" }}>Introduce a business owner and get {rw.campaign.reward_text}.</h2>
+            <p className="small muted" style={{ margin: 0 }}>The reward unlocks when they become a client and their first payment is confirmed. Our team approves every reward by hand.</p>
+            {rw.campaign.terms && <details className="small"><summary className="faint">Terms</summary><p className="muted pre">{rw.campaign.terms}</p></details>}
+          </div>
+        </section>
+      )}
       {!r.eligible && !r.link ? (
         <Panel><Empty icon="users" title="Not available yet">Referrals open after a completed project, once you&apos;ve shared your feedback. Thank you for working with us!</Empty></Panel>
       ) : (
@@ -80,6 +93,18 @@ export default async function MyReferrals() {
                   ))}</div>
                 )}
                 <p className="tiny faint" style={{ marginBottom: 0 }}>For their privacy we only show progress, never their details or discussions.</p>
+              </Panel>
+              {rw.rewards.length > 0 && (
+                <Panel title="Your rewards">
+                  <div className="list">{rw.rewards.map((w) => (
+                    <div key={w.id} className="list-item"><div className="grow"><div className="small" style={{ fontWeight: 500 }}>{w.reward_text}</div>
+                      <div className="tiny faint">{w.status === "issued" && w.issued_at ? `Issued ${fmtDate(w.issued_at)}` : `Since ${fmtDate(w.created_at)}`}{w.status === "rejected" && w.decision_note ? ` · ${w.decision_note}` : ""}</div></div>
+                      <Badge tone={w.status === "issued" || w.status === "approved" ? "green" : w.status === "eligible" ? "amber" : ""}>{REWARD_STATUS[w.status]}</Badge></div>
+                  ))}</div>
+                </Panel>
+              )}
+              <Panel title="Share your experience" sub="With your consent, we may publish it on our showcase page.">
+                <TestimonialForm defaultName={actor.name} items={testimonials.map((t) => ({ id: t.id, quote: t.quote, status: t.status }))} />
               </Panel>
               <Panel title="Email preferences">
                 <ActionForm action={emailPreferenceAction} toast className="stack-sm">

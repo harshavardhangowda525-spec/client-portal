@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "../icons";
 
 export function PreviewViewer({ url, embedBlocked }: { url: string; embedBlocked: boolean }) {
   const [device, setDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  const wrap = useRef<HTMLDivElement>(null);
+  const fullscreen = () => { const el = wrap.current; if (!el) return; if (document.fullscreenElement) void document.exitFullscreen(); else void el.requestFullscreen?.(); };
   if (embedBlocked) {
     return (
       <div className="glass panel">
@@ -27,9 +29,12 @@ export function PreviewViewer({ url, embedBlocked }: { url: string; embedBlocked
             </button>
           ))}
         </div>
-        <span className="tiny faint hide-sm">If the preview stays blank, use “Open in new tab”.</span>
+        <div className="row" style={{ gap: 8 }}>
+          <span className="tiny faint hide-sm">If the preview stays blank, use “Open in new tab”.</span>
+          <button type="button" className="btn btn-sm" onClick={fullscreen}><Icon name="monitor" /> Full screen</button>
+        </div>
       </div>
-      <div className="frame-wrap">
+      <div className="frame-wrap" ref={wrap}>
         <iframe className="frame" data-device={device} src={url} title="Website preview"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups" referrerPolicy="no-referrer" loading="lazy" />
       </div>

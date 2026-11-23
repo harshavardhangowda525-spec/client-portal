@@ -265,6 +265,42 @@ The client's history shows privacy-safe labels only: "Enquiry submitted", "Under
 
 Rewards are not enabled.
 
+## Growth portal (premium client experience)
+
+Migration `010_growth_portal.sql` adds the growth features on top of the existing portal. Existing financial records are not changed.
+
+**Client side**
+- **Design:** dark and light themes (toggle in the sidebar or top bar; kept in a `theme` cookie), a bottom tab bar on phones, staggered card entrances and timeline animations. All motion is turned off for people who prefer reduced motion.
+- **Dashboard** (`/portal/<project>`): your next step, 8 quick actions, a payment summary, recent activity built only from records the client may see, a recommended service with the reason, and a referral card.
+- **UPI scanner:** **Pay by UPI** opens an animated scanner around the invoice's QR code. On phones there is also an **Open UPI app** button with the amount filled in. Payments still count only after an admin confirms them; "I've paid" only sends the reference (UTR).
+  - The payee comes from **Settings → Maintenance & payments**. The migration fills in `9980801231@ybl` / "Infinity Web & Apps" only when no UPI ID was saved, and never overwrites one.
+- **Review Studio** (`/portal/<project>/preview`): Pending review → Changes requested → Updated → Approved, desktop/tablet/mobile previews and full screen.
+  - Requesting changes creates a revision task (Admin → Infinity Resolve → actions).
+  - Approving answers the linked approval request. It records who approved and when, and never changes prices.
+- **Services** (`/portal/services`): the admin-managed catalogue.
+  - Recommendations come from the client's business category, each with its reason, and can be hidden.
+  - **Request upgrade** records an inquiry, opens an opportunity in the pipeline (`source = upgrade_request`) and notifies admins. Nothing is charged.
+- **AI advisor** (`/portal/advisor`): suggests only catalogue services.
+  - Only the client's question and business category are sent to Groq.
+  - Replies that state an unlisted price, a timeline or a guarantee are replaced.
+  - Without `GROQ_API_KEY` (or with the advisor switched off) a rule-based matcher answers instead.
+  - Chats expire after 90 days (purged by the daily cron), and clients can delete them.
+  - **Request a consultation** creates opportunities (`source = ai_advisor`).
+- **Meetings** (`/portal/meetings`): book, reschedule or cancel a 15-minute consultation, project check-in, design walkthrough or support call.
+  - It uses the same calendar as discovery calls (**Referrals → Discovery calls → availability**), so only real free slots are offered, and a unique index plus a lock prevent double booking.
+  - A video link is added only if a default meeting link is configured.
+- **Refer & earn:** reward campaigns, plus a reward status for each referral. A client can also submit a testimonial with consent to publish the exact text.
+- **Account → Notify me by:** turn optional emails on or off. WhatsApp needs explicit consent, a phone number and the WhatsApp Cloud API variables. Until those are configured, nothing is sent and the page says so.
+
+**Admin side**
+- **Revenue & growth** (`/admin/growth`): 11 key numbers, with each definition on the page, and revenue from upgrades and referrals by month (confirmed payments net of refunds). Also the sales pipeline (New lead → Contacted → Interested → Demo scheduled → Proposal sent → Won / Lost), rewards waiting for approval, and failed jobs.
+- **Services & upgrades** (`/admin/services`): edit the catalogue (price text, benefits, recommendation keywords, visibility) and update request statuses, which notifies the client.
+- **Referrals → Rewards:** create campaigns. A reward becomes *eligible* only when a referred lead converts (first confirmed payment) while a campaign is active.
+  - Admins approve or reject it, then mark it issued with a note.
+  - A refund reverses rewards that weren't issued yet. Admins are alerted if a reward had already been issued.
+  - Possible duplicates are flagged.
+- **Showcase** (`/admin/showcase`, public at `/showcase`): case studies with before and after images and approved results. They can only be published once the client's permission is recorded. Testimonials are published only after admin review, and clients can withdraw them.
+
 ## View as client
 
 **View as client** is on every client page and project page. It opens the real portal exactly as that client sees it, with a banner across the top and an **Exit client view** button.
@@ -356,7 +392,7 @@ Before using the portal with a real client:
 - [ ] **Email (SMTP):** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`. Any SMTP provider works (Google Workspace, Zoho, Brevo, Postmark, SES…). Set up SPF and DKIM for the sending domain.
 - [ ] **WhatsApp Cloud API:** `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`. You need a Meta Business account and an approved template with one body variable. Without it, use the manual **Open in WhatsApp** button.
 - [ ] **Maintenance check:** set `CRON_SECRET` (`openssl rand -hex 32`) in Vercel. `vercel.json` schedules the daily call. Check **Admin → Maintenance**: "Last check" should update daily.
-- [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Scan the QR preview with your phone to verify it, but don't pay.
+- [ ] **Payment details:** **Settings → Maintenance & payments** → UPI ID and bank details. Migration 010 pre-fills `9980801231@ybl` if none was saved. Scan the QR preview with your phone to check the payee name, but don't pay.
 - [ ] **Razorpay:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`. Test with test-mode keys first. For the webhook, set `RAZORPAY_WEBHOOK_SECRET` and point a Razorpay webhook (events `payment.captured`, `order.paid`) at `https://<your-domain>/api/razorpay/webhook`.
 
 **Keep secret.** Never commit these values or expose them to the browser: `DATABASE_URL`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `SMTP_PASSWORD`, `WHATSAPP_TOKEN`, `ADMIN_SETUP_TOKEN`, `CRON_SECRET`, `GROQ_API_KEY`. All of them are read only on the server.

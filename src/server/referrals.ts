@@ -105,7 +105,9 @@ async function clientContact(tx: Tx, clientId: string) {
 export type EventType = "project.completed" | "project.reopened" | "project.cancelled" | "feedback.submitted" | "referral.invitation.created"
   | "referral.link.visited" | "referral.enquiry.submitted" | "referral.introduction.submitted" | "referral.lead.qualified" | "referral.call.booked"
   | "referral.call.cancelled" | "referral.call.completed" | "referral.proposal.sent" | "referral.proposal.accepted" | "referral.converted"
-  | "referral.conversion.reversed" | "referral.issue.reported";
+  | "referral.conversion.reversed" | "referral.issue.reported"
+  // Growth portal
+  | "service.inquiry.created" | "reward.eligible" | "reward.reversed" | "testimonial.submitted" | "meeting.booked" | "meeting.cancelled" | "advisor.consultation.requested";
 type Ids = { project_id?: string | null; client_id?: string | null; lead_id?: string | null; workflow_id?: string | null };
 type Handler = (payload: Record<string, unknown> & Ids) => Promise<void>;
 const HANDLERS: Partial<Record<EventType, Handler>> = {};
@@ -813,6 +815,7 @@ export async function recomputeConversion(clientId: string) {
 }
 
 HANDLERS["referral.converted"] = async ({ lead_id }) => {
+  await (await import("./rewards")).onReferralConverted(lead_id!);
   const s = await getReferralSettings();
   const info = await withDb(SYSTEM, async (tx) => {
     const [a] = await tx<{ referrer_client_id: string; business_name: string }[]>`select a.referrer_client_id, l.business_name from referral_attributions a join leads l on l.id = a.lead_id where a.lead_id = ${lead_id!}`;
@@ -829,7 +832,12 @@ HANDLERS["referral.converted"] = async ({ lead_id }) => {
 };
 
 // Events that are recorded for the timeline/analytics but need no extra side effects.
-for (const t of ["referral.link.visited", "referral.proposal.sent", "referral.proposal.accepted", "referral.conversion.reversed"] as EventType[]) HANDLERS[t] = async () => undefined;
+HANDLERS["referral.conversion.reversed"] = async ({ lead_id }) => { await (await import("./rewards")).onConversionReversed(lead_id!); };
+for (const t of ["referral.link.visited", "referral.proposal.sent", "referral.proposal.accepted", "referral.conversion.reversed",
+  "service.inquiry.created", "testimonial.submitted", "meeting.cancelled", "advisor.consultation.requested", "reward.reversed"] as EventType[]) HANDLERS[t] ??= async () => undefined;
+
+/** Lets other modules (rewards, meetings…) register handlers without circular imports at module load. */
+export function onEvent(type: EventType, handler: Handler) { HANDLERS[type] = handler; }
 
 // ---------------------------------------------------------------------------
 // Admin: events log and workflows
